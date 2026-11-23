@@ -39,7 +39,7 @@ export function applyAuth(original,request,entropy,now=Date.now()){
  if(!found||!member)return fail(401,'SESSION_REQUIRED','Please sign in again.');
  if(request.action==='logout'){store.sessions=store.sessions.filter(s=>s!==found);return result(200,{ok:true});}
  const command=request.request?.command;
- const reads=['sbo.workspace.read','sbo.run.status','sbo.run.result','sbo.tna.export'];
+ const reads=['sbo.workspace.read','sbo.workspace.status','sbo.run.status','sbo.run.result','sbo.tna.export'];
  if(typeof command!=='string')return fail(422,'VALIDATION_ERROR','A workspace command is required.');
  if(!reads.includes(command)&&!member.roles.some(r=>['sme','hrbp','business','coe'].includes(r)))return fail(403,'FORBIDDEN','Your workspace role allows reading only.');
  // CoE and business releases remain on their separate, not-yet-connected publisher path.

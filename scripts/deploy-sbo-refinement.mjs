@@ -10,7 +10,7 @@ async function deploy(key,workflow){
 const instantiate=async(file,replacements)=>{let text=await fs.readFile(file,'utf8');for(const [a,b] of Object.entries(replacements))text=text.replaceAll(a,b);return JSON.parse(text);};
 // Change only the Skill Studio API and its worker; preserve all current source and case data.
 const workspace=await instantiate('n8n/sbo-workspace-api.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_TEAM_HEADER_CREDENTIAL_ID:config.existingTeamCredentialId});await deploy('workflowId',workspace);
-const worker=await instantiate('n8n/sbo-mapping-worker.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_GATEWAY_CREDENTIAL_ID:config.gatewayCredentialId,VERIFIED_GATEWAY_MODEL:'claude-sonnet-5'});worker.settings.executionTimeout=300;await deploy('workerId',worker);
+const worker=await instantiate('n8n/sbo-mapping-worker.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_GATEWAY_CREDENTIAL_ID:config.gatewayCredentialId,VERIFIED_GATEWAY_MODEL:'claude-sonnet-5',SBO_WORKER_ID:config.workerId});worker.settings.executionTimeout=210;await deploy('workerId',worker);
 if(!config.authTableId){const table=await api('/data-tables','POST',{name:'Skill Design Studio personal access v1',columns:[{name:'workspace',type:'string'},{name:'revision',type:'number'},{name:'payload',type:'string'}]});config.authTableId=table.id;await save();}
 const authTable=await api('/data-tables/'+config.authTableId);if(authTable.name!=='Skill Design Studio personal access v1')throw new Error('Unexpected authentication table');
 const authRows=await api('/data-tables/'+config.authTableId+'/rows?limit=2');
@@ -26,7 +26,7 @@ const mail={name:'Skill Design Studio | login code delivery v1',nodes:[
 ],connections:{'Trusted login request':{main:[[{node:'Validate Studio mail',type:'main',index:0}]]},'Validate Studio mail':{main:[[{node:'Send Studio code',type:'main',index:0}]]},'Send Studio code':{main:[[{node:'Mail accepted',type:'main',index:0}]]}},settings:{executionOrder:'v1',callerPolicy:'workflowsFromSameOwner',saveDataErrorExecution:'none',saveDataSuccessExecution:'none',saveManualExecutions:false,executionTimeout:30}};
 await deploy('mailWorkflowId',mail);
 const internal=await instantiate('n8n/sbo-personal-workspace.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId});await deploy('personalWorkspaceId',internal);
-const auth=await instantiate('n8n/sbo-personal-access.template.json',{SBO_AUTH_TABLE_ID:config.authTableId,SBO_INTERNAL_API_ID:config.personalWorkspaceId,SBO_MAIL_WORKFLOW_ID:config.mailWorkflowId});await deploy('personalAccessId',auth);
+const auth=await instantiate('n8n/sbo-personal-access.template.json',{SBO_AUTH_TABLE_ID:config.authTableId,SBO_INTERNAL_API_ID:config.personalWorkspaceId,SBO_MAIL_WORKFLOW_ID:config.mailWorkflowId,SBO_WORKER_ID:config.workerId});await deploy('personalAccessId',auth);
 // Capabilities are enabled only after the corresponding worker and routes are deployed.
 let enabled=false;for(let attempt=0;attempt<3&&!enabled;attempt++){
  const rows=await api('/data-tables/'+config.tableId+'/rows?limit=2');if(rows.data.length!==1)throw new Error('Unexpected workspace rows');const row=rows.data[0],w=JSON.parse(row.payload);

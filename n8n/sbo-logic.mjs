@@ -3,19 +3,22 @@ export function applyCommand(original, request, now = new Date().toISOString(), 
   const error=(code,message,status=422)=>({write:false,status,response:{ok:false,error:{code,message}}});
   if(!request||typeof request!=='object'||Array.isArray(request)||JSON.stringify(request).length>500000)return error('VALIDATION_ERROR','Invalid request or request too large.');
   if(request.contractVersion!=='sbo.case.v1')return error('VALIDATION_ERROR','Unsupported contract version.');
-  const readCommands=['sbo.workspace.read','sbo.run.status','sbo.run.result','sbo.tna.export'];
+  const readCommands=['sbo.workspace.read','sbo.workspace.status','sbo.run.status','sbo.run.result','sbo.tna.export'];
   const op=request.command,p=request.payload||{};
-  const w=JSON.parse(JSON.stringify(original));
-  const result=()=>({ok:true,workspace:w,revision:w.revision});
-  if(op==='sbo.workspace.read')return {write:false,status:200,response:result()};
+  let w=original;
+  const publicRun=r=>{const {inputCase,inputSources,...safe}=r;void inputCase;void inputSources;return safe;};
+  const publicWorkspace=()=>{const {history,receipts,...safe}=w;void history;void receipts;const data={...safe,runs:w.runs.map(publicRun),audit:w.audit.slice(-100)};if(request.responseMode==="compact"||op==="sbo.workspace.status"){delete data.skills;delete data.roles;}return data;};
+  const result=()=>({ok:true,workspace:publicWorkspace(),revision:w.revision});
+  if(op==='sbo.workspace.read'||op==='sbo.workspace.status')return {write:false,status:200,response:result()};
   if(op==='sbo.run.status'||op==='sbo.run.result'){
     const run=w.runs.find(r=>r.id===p.runId);if(!run)return error('NOT_FOUND','Run not found.',404);
-    return {write:false,status:200,response:{ok:true,run}};
+    return {write:false,status:200,response:{ok:true,run:publicRun(run)}};
   }
   if(op==='sbo.tna.export'){
     const c=w.cases.find(c=>c.id===p.caseId);if(!c||c.version!==p.caseVersion)return error('VERSION_CONFLICT','Refresh the selected case before export.',409);
     return {write:false,status:200,response:{ok:true,export:{case:c,sourceManifest:w.sourceManifest,ruleVersion:'sbo-rules-1.0.0',workspaceRevision:w.revision}}};
   }
+  w=JSON.parse(JSON.stringify(original));
   if(!readCommands.includes(op)&&(!/^[\w-]{1,100}$/.test(request.idempotencyKey||'')))return error('VALIDATION_ERROR','A stable operation identifier is required.');
   const fingerprint=JSON.stringify({command:op,payload:p,expectedVersion:request.expectedVersion});
   const prior=(w.receipts||[]).find(r=>r.key===request.idempotencyKey);
@@ -87,7 +90,7 @@ export function applyCommand(original, request, now = new Date().toISOString(), 
     if(op==='sbo.upskill.propose.start'&&!c.requirements.length)return error('VALIDATION_ERROR','Create role requirements before requesting development formats.');
     if(op==='sbo.support.ask.start'&&!required(p.question))return error('VALIDATION_ERROR','Enter a support question.');
     if(op==='sbo.trend.scan.start'&&c.researchParameters?.sourceIds?.length===0)return error('VALIDATION_ERROR','Select at least one curated source.');
-    if(w.runs.some(r=>r.caseId===c.id&&['queued','running'].includes(r.status)))return error('RUN_ACTIVE','An analysis is already active for this case.',409);
+    if(w.runs.some(r=>r.caseId===c.id&&['queued','running'].includes(r.status)&&((r.operation==='sbo.support.ask.start')===(op==='sbo.support.ask.start'))))return error('RUN_ACTIVE','An analysis is already active for this case.',409);
     const run={id:request.idempotencyKey,caseId:c.id,operation:op,status:'queued',quality:'pending',stage:'Queued for analysis',inputVersion:c.version,startedAt:now,updatedAt:now,inputCase:JSON.parse(JSON.stringify(c)),retryOfRunId:p.retryOfRunId,...(op==='sbo.support.ask.start'?{question:p.question.slice(0,4000),section:typeof p.section==='string'?p.section.slice(0,80):'Overview'}:{})};w.runs.push(run);
   } else if(op==='sbo.run.interrupt'){
     const run=w.runs.find(r=>r.id===p.runId);if(!run)return error('NOT_FOUND','Run not found.',404);
