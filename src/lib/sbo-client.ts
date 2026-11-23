@@ -4,7 +4,7 @@ export class WorkspaceError extends Error {constructor(message:string,public cod
 export const personalApiUrl=process.env.NEXT_PUBLIC_SBO_PERSONAL_API_URL||'https://eraneos-agentic-platform.azurewebsites.net/webhook/agentic-skill-design-auth-v1';
 type PersonalResponse=Response&{challengeId?:string;message?:string;session?:{token:string;expiresAt:number;user:{email:string;roles:string[]}}};
 export async function personalAccess(body:Record<string,unknown>):Promise<PersonalResponse>{
- const response=await fetch(personalApiUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(30000)});
+ let response:globalThis.Response;try{response=await fetch(personalApiUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(30000)});}catch{throw new WorkspaceError('The workspace connection was interrupted. Your draft is preserved. Retry when the service is available.','CONNECTION_UNAVAILABLE',0);}
  let result:PersonalResponse;try{result=await response.json();}catch{throw new WorkspaceError('Personal sign-in is unavailable. Please retry later.','AUTH_UNAVAILABLE',response.status);}
  if(!response.ok||!result.ok)throw new WorkspaceError(result.error?.message||'Unable to process personal access.',result.error?.code||'AUTH_ERROR',response.status);return result;
 }
