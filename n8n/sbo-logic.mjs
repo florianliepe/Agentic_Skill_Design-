@@ -5,7 +5,7 @@ export function applyCommand(original, request, now = new Date().toISOString()) 
   if(request.contractVersion!=='sbo.case.v1')return error('VALIDATION_ERROR','Unsupported contract version.');
   const readCommands=['sbo.workspace.read','sbo.run.status','sbo.run.result','sbo.tna.export'];
   const op=request.command,p=request.payload||{};
-  const w=structuredClone(original);
+  const w=JSON.parse(JSON.stringify(original));
   const result=()=>({ok:true,workspace:w,revision:w.revision});
   if(op==='sbo.workspace.read')return {write:false,status:200,response:result()};
   if(op==='sbo.run.status'||op==='sbo.run.result'){
@@ -79,7 +79,7 @@ export function applyCommand(original, request, now = new Date().toISOString()) 
     const c=w.cases.find(c=>c.id===p.caseId);if(!c)return error('NOT_FOUND','Save the case before starting an analysis.',404);
     if(op==='sbo.profile.draft.start'&&!c.roleId)return error('VALIDATION_ERROR','Select a global role for profile drafting.');
     if(w.runs.some(r=>r.caseId===c.id&&['queued','running'].includes(r.status)))return error('RUN_ACTIVE','An analysis is already active for this case.',409);
-    const run={id:request.idempotencyKey,caseId:c.id,operation:op,status:'queued',quality:'pending',stage:'Queued for analysis',inputVersion:c.version,startedAt:now,updatedAt:now,inputCase:structuredClone(c),retryOfRunId:p.retryOfRunId};w.runs.push(run);
+    const run={id:request.idempotencyKey,caseId:c.id,operation:op,status:'queued',quality:'pending',stage:'Queued for analysis',inputVersion:c.version,startedAt:now,updatedAt:now,inputCase:JSON.parse(JSON.stringify(c)),retryOfRunId:p.retryOfRunId};w.runs.push(run);
   } else if(op==='sbo.run.interrupt'){
     const run=w.runs.find(r=>r.id===p.runId);if(!run)return error('NOT_FOUND','Run not found.',404);
     if(['queued','running'].includes(run.status)){run.status='interrupted';run.quality='interrupted';run.updatedAt=now;run.stage='Stopped before result adoption';}

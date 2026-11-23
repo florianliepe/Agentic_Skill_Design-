@@ -1,0 +1,24 @@
+import fs from 'node:fs/promises';
+// Inactive template. Existing credential/model references must be verified before deployment.
+const source=(await fs.readFile('n8n/sbo-agent.mjs','utf8')).replace(/^export /gm,'');
+const table='SBO_WORKSPACE_TABLE_ID',nodes=[],connections={};
+const add=(name,type,parameters,x,y=300,extras={})=>nodes.push({id:name.toLowerCase().replaceAll(' ','-'),name,type:type.includes('.')?type:`n8n-nodes-base.${type}`,typeVersion:type==='code'?2:1,position:[x,y],parameters,...extras});
+const link=(from,to,output=0,type='main')=>{connections[from]||={};connections[from][type]||=[];connections[from][type][output]||=[];connections[from][type][output].push({node:to,type,index:0});};
+const read=(name,x)=>add(name,'dataTable',{operation:'get',dataTableId:{__rl:true,value:table,mode:'id'},matchType:'allConditions',filters:{conditions:[{keyName:'workspace',condition:'eq',keyValue:'main'}]},returnAll:true},x);
+const cas=(name,x)=>add(name,'dataTable',{operation:'update',dataTableId:{__rl:true,value:table,mode:'id'},matchType:'allConditions',filters:{conditions:[{keyName:'workspace',condition:'eq',keyValue:'main'},{keyName:'revision',condition:'eq',keyValue:'={{ $json.previousRevision }}'}]},columns:{mappingMode:'defineBelow',value:{payload:'={{ $json.payload }}',revision:'={{ $json.revision }}'},matchingColumns:[],schema:[],attemptToConvertTypes:false,convertFieldsToString:false},options:{}},x,300,{alwaysOutputData:true});
+add('Poll queued mapping','scheduleTrigger',{rule:{interval:[{field:'minutes',minutesInterval:1}]}},0,300,{typeVersion:1.2});
+read('Read for claim',220);
+add('Prepare claim','code',{jsCode:source+'\nconst w=JSON.parse($input.first().json.payload);const claim=claimNextRun(w);return claim.write?[{json:claim}]:[];'},440);
+cas('Claim unchanged revision',660);
+add('Prepare model input','code',{jsCode:source+'\nconst row=$input.first().json;const claim=$("Prepare claim").first().json;if(!row.payload||!claim.runId)return [];const w=JSON.parse(row.payload);const run=w.runs.find(r=>r.id===claim.runId);if(!run||run.status!=="running")return [];const prepared=prepareMapping(w,run);if(JSON.stringify(prepared.messages).length>180000)throw new Error("INPUT_BUDGET_EXCEEDED");return [{json:prepared}];'},880);
+add('Draft role requirements','@n8n/n8n-nodes-langchain.chainLlm',{promptType:'define',text:'={{ $json.messages[1].content }}',messages:{messageValues:[{type:'SystemMessagePromptTemplate',message:'={{ $json.messages[0].content }}'}]},batching:{batchSize:1}},1100,300,{typeVersion:1.7,onError:'continueRegularOutput'});
+add('Eraneos mapping model','@n8n/n8n-nodes-langchain.lmChatOpenAi',{model:{__rl:true,value:'VERIFIED_GATEWAY_MODEL',mode:'id'},options:{temperature:0,timeout:120000,maxRetries:0,maxTokens:8000}},1100,540,{typeVersion:1.3,credentials:{openAiApi:{id:'EXISTING_GATEWAY_CREDENTIAL_ID',name:'Eraneos LLM Gateway'}}});
+add('Validate model result','code',{jsCode:source+'\nconst output=$input.first().json;const prepared=$("Prepare model input").first().json;const validated=output.error?{valid:false,errors:["GATEWAY_ERROR"]}:validateMapping(output.text??output.output??output,prepared);return [{json:{runId:prepared.runId,validated}}];'},1320);
+read('Read for completion',1540);
+add('Prepare completion','code',{jsCode:source+'\nconst w=JSON.parse($input.first().json.payload);const v=$("Validate model result").first().json;const completion=completeRun(w,v.runId,v.validated);return completion.write?[{json:completion}]:[];'},1760);
+cas('Commit completed result',1980);
+add('Check completed result','code',{jsCode:'const row=$input.first().json;if(!row.payload)throw new Error("COMPLETION_CAS_CONFLICT: no result adopted; lease watchdog will mark this run timed_out, retry creates a new run");return [{json:{committed:true,runId:$("Validate model result").first().json.runId}}];'},2200);
+for(const [a,b] of [['Poll queued mapping','Read for claim'],['Read for claim','Prepare claim'],['Prepare claim','Claim unchanged revision'],['Claim unchanged revision','Prepare model input'],['Prepare model input','Draft role requirements'],['Draft role requirements','Validate model result'],['Validate model result','Read for completion'],['Read for completion','Prepare completion'],['Prepare completion','Commit completed result'],['Commit completed result','Check completed result']])link(a,b);
+link('Eraneos mapping model','Draft role requirements',0,'ai_languageModel');
+await fs.writeFile('n8n/sbo-mapping-worker.template.json',JSON.stringify({name:'Skill Design Studio | mapping worker v1',nodes,connections,settings:{executionOrder:'v1',saveDataErrorExecution:'none',saveDataSuccessExecution:'none',saveManualExecutions:false,executionTimeout:180}},null,2)+'\n');
+console.log('Generated inactive mapping worker template: 120s model timeout, 240s lease, one workspace run at a time. Live model compatibility and storage CAS remain acceptance gates.');

@@ -11,7 +11,7 @@
     "lint": "eslint src n8n scripts tests",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/sbo.test.mjs",
-    "workflow:build": "node scripts/build-sbo-workflow.mjs"
+    "workflow:build": "node scripts/build-sbo-workflow.mjs && node scripts/build-sbo-worker.mjs"
   },
   "dependencies": {
     "next": "^16.3.0",

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {applyCommand} from '../n8n/sbo-logic.mjs';
-import {prepareMapping,validateMapping,completeRun} from '../n8n/sbo-agent.mjs';
+import {prepareMapping,validateMapping,completeRun,claimNextRun} from '../n8n/sbo-agent.mjs';
 import {assessRequirement,priority,reviewBlockers} from '../src/lib/sbo-rules.mjs';
 const skill={id:'S1',name:'Evidence verification',definition:'Verify evidence against requirements',anchors:['Guided','Independent','Complex','Standards'],identityHash:'canonical-1',status:'approved'};
 const req={id:'R1',skillId:'S1',section:'core',target:2,rationale:'The work verifies evidence.',evidence:'JRD purpose: Verify evidence against requirements',task:'Verify evidence',critical:false,future:false,jrdChange:false};
@@ -28,3 +28,5 @@ test('valid structural output remains subject to SME semantic review',()=>{const
 test('no forced profile quota and no invented future entries',()=>{const r=validateMapping({requirements:[],questions:['Which evidence is missing?'],residuals:['Insufficient source evidence']},prepared());assert.equal(r.valid,true);assert.equal(r.quality,'partial_with_residuals');});
 test('duplicate review event changes case once',()=>{const one=applyCommand(base(),request('sbo.review.trigger',{caseId:'C1',eventId:'event'}));const two=applyCommand(JSON.parse(one.payload),request('sbo.review.trigger',{caseId:'C1',eventId:'event'},'op-2',2));assert.equal(JSON.parse(two.payload).cases[0].version,2);});
 test('shared access cannot store individual assessments without subject-level identity',()=>{const person={id:'A1',personRef:'EX-P1',skillId:'S1',task:req.task,kind:'self',current:2,reason:'Synthetic observed example',assessedBy:'EX-P1',assessedAt:'2026-11-23',profileVersion:1,status:'draft'};const r=applyCommand(base(),request('sbo.case.save',{case:{...c,individualAssessments:[person]}}));assert.equal(r.status,403);assert.equal(r.response.error.code,'IDENTITY_REQUIRED');});
+test('worker claim pins input sources and excludes another claim',()=>{const queued=applyCommand(base(),request('sbo.profile.draft.start',{caseId:'C1'}));const claimed=claimNextRun(JSON.parse(queued.payload),'2026-11-23T10:00:00Z');assert.equal(claimed.runId,'op-1');const w=JSON.parse(claimed.payload);assert.equal(w.runs[0].status,'running');assert.equal(w.runs[0].leaseUntil,'2026-11-23T10:04:00.000Z');assert.equal(claimNextRun(w,'2026-11-23T10:01:00Z').write,false);});
+test('expired lease becomes explicit timeout, never a synthetic success',()=>{const w=base();w.runs.push({id:'run',status:'running',leaseUntil:'2026-11-23T09:00:00Z'});const expired=claimNextRun(w,'2026-11-23T10:00:00Z');assert.equal(expired.runId,null);assert.equal(JSON.parse(expired.payload).runs[0].status,'timed_out');assert.equal(completeRun(JSON.parse(expired.payload),'run',{valid:true,result:{}}).write,false);});

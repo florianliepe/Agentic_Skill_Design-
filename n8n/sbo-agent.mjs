@@ -1,5 +1,15 @@
 // Agent boundary: retrieval is local; the model may select canonical concepts, never redefine them.
 export const agentVersion='sbo.mapping.v1';
+export function claimNextRun(workspace,now=new Date().toISOString()){
+  const w=JSON.parse(JSON.stringify(workspace));
+  const expired=w.runs.find(r=>r.status==='running'&&r.leaseUntil&&r.leaseUntil<now);
+  if(expired){expired.status='timed_out';expired.quality='incomplete';expired.stage='Worker lease expired';expired.error='The analysis did not complete within its lease. Start a new run to retry.';expired.updatedAt=now;w.revision++;return {write:true,previousRevision:workspace.revision,revision:w.revision,payload:JSON.stringify(w),runId:null};}
+  if(w.runs.some(r=>r.status==='running'))return {write:false};
+  const run=w.runs.find(r=>r.status==='queued'&&r.operation==='sbo.profile.draft.start');
+  if(!run)return {write:false};
+  run.status='running';run.stage='Drafting against canonical concepts';run.updatedAt=now;run.leaseUntil=new Date(Date.parse(now)+240000).toISOString();run.agentVersion=agentVersion;run.inputSources=JSON.parse(JSON.stringify(w.sourceManifest));w.revision++;
+  return {write:true,previousRevision:workspace.revision,revision:w.revision,payload:JSON.stringify(w),runId:run.id};
+}
 export function prepareMapping(workspace,run){
   const c=run.inputCase,role=workspace.roles.find(r=>r.id===c.roleId);
   if(!role)throw new Error('SOURCE_NOT_FOUND');
@@ -30,7 +40,7 @@ export function validateMapping(raw,prepared){
   return errors.length?{valid:false,errors}:{valid:true,result:{requirements,questions:data.questions,residuals:data.residuals},quality:data.questions.length||data.residuals.length||!requirements.length?'partial_with_residuals':'structurally_valid_needs_sme_review'};
 }
 export function completeRun(workspace,runId,validated,now=new Date().toISOString()){
-  const w=structuredClone(workspace),run=w.runs.find(r=>r.id===runId);
+  const w=JSON.parse(JSON.stringify(workspace)),run=w.runs.find(r=>r.id===runId);
   if(!run||run.status!=='running')return {write:false,reason:'RUN_NO_LONGER_ACTIVE'};
   run.status=validated.valid?'succeeded':'failed';run.quality=validated.valid?validated.quality:'invalid_output';run.stage=validated.valid?'Ready for SME review':'Output validation failed';run.updatedAt=now;
   if(validated.valid)run.result=validated.result;else run.error='Output failed canonical or evidence validation. Review inputs before retrying.';
