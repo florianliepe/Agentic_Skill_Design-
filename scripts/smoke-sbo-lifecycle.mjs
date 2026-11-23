@@ -1,0 +1,20 @@
+import fs from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import {command} from './sbo-live-client.mjs';
+const prior=JSON.parse(await fs.readFile('.local/live-run.json'));
+let {workspace:w}=await command('sbo.workspace.read');
+const run=w.runs.find(r=>r.id===prior.id);assert.equal(run.status,'succeeded');assert.ok(run.result.requirements.length>0);
+const seed=JSON.parse(await fs.readFile('.local/source-workspace.json'));
+assert.deepEqual(w.skills,seed.skills);assert.deepEqual(w.roles,seed.roles);
+assert.ok(run.caseId.startsWith('LIVE-VERIFY-'));
+if(!run.adopted)w=(await command('sbo.run.adopt',{runId:run.id},w.revision)).workspace;
+const c=w.cases.find(c=>c.id===run.caseId);assert.equal(c.status,'draft');assert.equal(c.version,run.inputVersion+1);assert.ok(c.requirements.length>=run.result.requirements.length);
+const existing=w.runs.find(r=>r.caseId===c.id&&['queued','running'].includes(r.status));
+const interruptedId=existing?.id||crypto.randomUUID();if(!existing)w=(await command('sbo.profile.draft.start',{caseId:c.id},w.revision,interruptedId)).workspace;
+for(let attempt=0;attempt<3;attempt++){w=(await command('sbo.workspace.read')).workspace;try{w=(await command('sbo.run.interrupt',{runId:interruptedId},w.revision)).workspace;break;}catch(error){if(!error.message.includes('VERSION_CONFLICT')||attempt===2)throw error;}}
+assert.equal(w.runs.find(r=>r.id===interruptedId).status,'interrupted');
+await assert.rejects(command('sbo.run.adopt',{runId:interruptedId},w.revision),/409/);
+const retryId=crypto.randomUUID();w=(await command('sbo.profile.draft.start',{caseId:c.id,retryOfRunId:interruptedId},w.revision,retryId)).workspace;
+assert.equal(w.runs.find(r=>r.id===retryId).retryOfRunId,interruptedId);
+const report={at:new Date().toISOString(),firstRunId:run.id,requirements:run.result.requirements.length,quality:run.quality,sourceImmutability:'passed',adoption:'draft only',interruptedId,interruptedAdoptionDenied:true,retryId,caseId:c.id};
+await fs.writeFile('.local/live-lifecycle.json',JSON.stringify(report,null,2));await fs.writeFile('.local/live-run.json',JSON.stringify({id:retryId,caseId:c.id,inputVersion:c.version},null,2));console.log(report);

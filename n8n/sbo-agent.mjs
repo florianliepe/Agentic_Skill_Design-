@@ -25,7 +25,7 @@ export function prepareMapping(workspace,run){
 }
 export function validateMapping(raw,prepared){
   const errors=[];let data;
-  try{data=typeof raw==='string'?JSON.parse(raw):raw;}catch{return {valid:false,errors:['INVALID_JSON']};}
+  try{const text=typeof raw==='string'?raw.trim():raw;const fenced=typeof text==='string'?text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i):null;data=typeof text==='string'?JSON.parse(fenced?fenced[1]:text):text;}catch{return {valid:false,errors:['INVALID_JSON']};}
   if(!data||!Array.isArray(data.requirements)||data.requirements.length>200||!Array.isArray(data.questions)||data.questions.length>3||!Array.isArray(data.residuals))return {valid:false,errors:['INVALID_SCHEMA']};
   const requirements=[];const used=new Set();
   for(const [index,r] of data.requirements.entries()){
@@ -42,8 +42,8 @@ export function validateMapping(raw,prepared){
 export function completeRun(workspace,runId,validated,now=new Date().toISOString()){
   const w=JSON.parse(JSON.stringify(workspace)),run=w.runs.find(r=>r.id===runId);
   if(!run||run.status!=='running')return {write:false,reason:'RUN_NO_LONGER_ACTIVE'};
-  run.status=validated.valid?'succeeded':'failed';run.quality=validated.valid?validated.quality:'invalid_output';run.stage=validated.valid?'Ready for SME review':'Output validation failed';run.updatedAt=now;
-  if(validated.valid)run.result=validated.result;else run.error='Output failed canonical or evidence validation. Review inputs before retrying.';
+  run.status=validated.valid?'succeeded':'failed';run.quality=validated.valid?validated.quality:validated.errors?.includes('GATEWAY_ERROR')?'incomplete':'invalid_output';run.stage=validated.valid?'Ready for SME review':validated.errors?.includes('GATEWAY_ERROR')?'Gateway request failed':'Output validation failed';run.updatedAt=now;
+  if(validated.valid)run.result=validated.result;else run.error=validated.errors?.includes('GATEWAY_ERROR')?'The model request failed. Check gateway configuration before retrying.':'Output failed canonical or evidence validation. Review inputs before retrying.';
   w.revision++;
   return {write:true,previousRevision:workspace.revision,revision:w.revision,payload:JSON.stringify(w)};
 }

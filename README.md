@@ -4,11 +4,11 @@ A focused Eraneos-style workbench for role profiles, emerging skills and qualita
 
 ## Release status
 
-Version 0.2 is an interactive frontend preview with a synthetic example. The protected n8n workspace and LLM gateway are **not deployed or verified**. Login stays disabled until `NEXT_PUBLIC_SBO_ENABLED=true` is explicitly set after integration tests. Example edits last only for the current browser tab.
+The protected n8n workspace and asynchronous mapping worker were deployed and tested on 23 November 2026. The workspace contains 1,012 source concepts (974 skills and 38 competencies) and 825 global roles behind header authentication. The mapping worker calls the Eraneos gateway and returns evidence-bound drafts for SME review. Enable the frontend with `NEXT_PUBLIC_SBO_ENABLED=true` only after the live acceptance checks below pass. The synthetic example remains available; its edits last only for the current browser tab.
 
 Implemented: case intake, canonical concept search and own-anchor detail, evidence-linked core/depth profiles, three-horizon signal radar, gap heatmap, separate catalogue/profile/proficiency/coverage statuses, qualitative SME baseline, proposed development formats, contribution review, explicit saves, draft-preserving API errors, versioned assessment export. The synthetic example also supports individual self-assessments and reviewer assessments as separate evidence records. Real individual records are blocked in the shared-access API until verified subject-level access is connected; no automatic employee ranking or averaging is performed.
 
-Backend code includes a tested command reducer, idempotency receipts, revision checks, run state/adoption guards, canonical-output validation and inactive n8n workspace API and mapping-worker templates. Atomic storage and the gateway still require live acceptance tests. No live AI worker, search-provider integration, named-role approvals, scheduled business review or release publisher is included in this release.
+The command reducer, idempotent retries and atomic concurrent-write protection have passed live checks (one concurrent save succeeds; the other receives HTTP 409). Unauthorised data reads and shared-access approvals are rejected. The live mapping worker validates canonical identities and exact JRD evidence before making a result available. Trend research, named-role approvals, scheduled business review and a release publisher are not connected. Real individual records still require subject-level identity.
 
 ## Local development
 
@@ -54,4 +54,14 @@ Execution status, output quality and business state are distinct. Structural can
 
 The predecessor pilot was analysed read-only at commit `cb5acfff772ee22cb17495aadcd324d7df732537`. This checkout evolves its static-export deployment pattern and guided skill-design approach with new case-centric components and contracts. PMO components, legacy sync scripts and historical campaign data are not shipped. The predecessor and its uncommitted changes remain untouched.
 
-The worker uses n8n's [Basic LLM Chain](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.chainllm/) with a separate system message, and the [OpenAI-compatible Chat Model](https://docs.n8n.io/integrations/builtin/cluster-nodes/sub-nodes/n8n-nodes-langchain.lmchatopenai/) node's timeout and retry controls. Model support must be confirmed against the configured Eraneos gateway; the template does not imply that any particular model is available.
+The worker uses n8n's [Basic LLM Chain](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.chainllm/) with a separate system message, and the [OpenAI-compatible Chat Model](https://docs.n8n.io/integrations/builtin/cluster-nodes/sub-nodes/n8n-nodes-langchain.lmchatopenai/) node's timeout and retry controls. Live acceptance uses claude-sonnet-5 with temperature 1, an explicit Chat Completions configuration (`responsesApiEnabled:false`) and a 16,000-token output budget. The initial temperature-0 call was rejected and earlier responses were incomplete; failures were retained as failures, never adopted. One complete JSON code fence is accepted as a transport wrapper, while truncated JSON and surrounding prose remain invalid. Canonical names, IDs, hashes and exact source quotations are still checked. A structurally valid result is a draft, not business acceptance.
+
+## Repeatable live verification
+
+Use the gitignored `.local/deployment.json` for isolated resource references and `.local/source-workspace.json` for the protected source snapshot. Credentials are read from the user home `.codex/secrets/agentic-skill-design` directory and are never printed or bundled. The worker reuses existing server-side credentials without changing other workflows; the newly saved gateway key was separately verified by a direct model call.
+
+- `node scripts/smoke-sbo-live.mjs`: creates an explicitly labelled technical case and checks access denial, CORS, source counts, idempotency, concurrent saves and approval denial.
+- `node scripts/start-sbo-live-run.mjs`: starts a real mapping run for that case.
+- After success, `node scripts/smoke-sbo-lifecycle.mjs`: verifies source immutability, draft adoption, interruption and a new retry run.
+
+These checks consume model tokens and mutate only the labelled technical test case. They do not grant profile or catalogue approval. Diagnostic execution saving is normally disabled on the worker; private troubleshooting snapshots stay outside Git.
