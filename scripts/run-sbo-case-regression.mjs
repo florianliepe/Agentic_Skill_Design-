@@ -13,7 +13,7 @@ if(phase===0){
  apply('sbo.contribution.submit',{caseId:c.id,actor:'Business SME statement supplied by Florian Liepe',target:'Organisational baseline',text:config.quote+' Ist-Proficiency und Vergleichbarkeit zur künftigen Nachfrage sind noch zu validieren.'},'sme-note');
  apply('sbo.profile.draft.start',{caseId:c.id},'mapping');
 }else{
- const run=w.runs.find(r=>r.id===prefix+'-'+keys[phase-1]);if(!run&&phase===2){apply('sbo.trend.scan.start',{caseId:c.id},'trends');return [{json:{previousRevision:original.revision,revision:w.revision,payload:JSON.stringify(w),phase,expectedVersion:c.version,complete:false}}];}if(!run||['queued','running'].includes(run.status))return [];
+ const run=w.runs.find(r=>r.id===prefix+'-'+keys[phase-1]);if(!run&&(phase===2||phase===3)){apply(phase===2?'sbo.trend.scan.start':'sbo.upskill.propose.start',{caseId:c.id},keys[phase-1]);return [{json:{previousRevision:original.revision,revision:w.revision,payload:JSON.stringify(w),phase,expectedVersion:c.version,complete:false}}];}if(!run||['queued','running'].includes(run.status))return [];
  if(run.status!=='succeeded')throw new Error('REGRESSION_AGENT_FAILED_'+(run.diagnostics?.errorCode||run.quality));
  apply('sbo.run.adopt',{runId:run.id},'adopt-'+phase);
  if(phase===1){apply('sbo.case.save',{case:{...c,researchParameters:{businessField:c.unit,region:'Global',focus:'AI-assisted consulting: business use case evaluation, solution design, output verification and responsible AI',process:'Client question to validated recommendation',technology:'Generative AI',horizon:'1 year',sourceIds:['nist-ai','oecd-ai','cedefop','dekra-digital','wef-jobs']}}},'scope');apply('sbo.trend.scan.start',{caseId:c.id},'trends');}
