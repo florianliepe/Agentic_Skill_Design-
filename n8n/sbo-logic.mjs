@@ -1,5 +1,5 @@
 // Pure command handler. The n8n wrapper atomically CAS-commits the returned payload.
-export function applyCommand(original, request, now = new Date().toISOString()) {
+export function applyCommand(original, request, now = new Date().toISOString(), verifiedContext = null) {
   const error=(code,message,status=422)=>({write:false,status,response:{ok:false,error:{code,message}}});
   if(!request||typeof request!=='object'||Array.isArray(request)||JSON.stringify(request).length>500000)return error('VALIDATION_ERROR','Invalid request or request too large.');
   if(request.contractVersion!=='sbo.case.v1')return error('VALIDATION_ERROR','Unsupported contract version.');
@@ -52,7 +52,8 @@ export function applyCommand(original, request, now = new Date().toISOString()) 
     if(JSON.stringify(incoming.individualAssessments||[])!==JSON.stringify(existing?.individualAssessments||[]))return error('IDENTITY_REQUIRED','Individual assessments require verified subject-level access. They are not stored through shared team access.',403);
     if(existing&&incoming.version!==existing.version)return error('VERSION_CONFLICT','The case version changed.',409);
     if(!existing&&incoming.version!==0)return error('VERSION_CONFLICT','New cases start at version zero.',409);
-    const next=Object.fromEntries(['id','title','unit','question','owner','targetDate','trigger','roleId','relevance','requirements','baselines','signals','measures'].map(key=>[key,incoming[key]]));
+    if(incoming.researchParameters){const rp=incoming.researchParameters;if(!['businessField','region','focus','process','technology','horizon'].every(k=>typeof rp[k]==='string'&&rp[k].length<12000)||!Array.isArray(rp.sourceIds)||rp.sourceIds.length>5||rp.sourceIds.some(id=>!['nist-ai','oecd-ai','cedefop','dekra-digital','wef-jobs'].includes(id)))return error('VALIDATION_ERROR','Invalid research parameters or source selection.');}
+    const next=Object.fromEntries(['id','title','unit','question','owner','targetDate','trigger','roleId','relevance','requirements','baselines','signals','measures','researchParameters'].map(key=>[key,incoming[key]]));
     Object.assign(next,{version:(existing?.version||0)+1,updatedAt:now,status:'draft',decisions:[],contributions:existing?.contributions||[]});
     next.individualAssessments=existing?.individualAssessments||[];
     w.history=[...(w.history||[]),...(existing?[{caseId:existing.id,version:existing.version,snapshot:existing}]:[])];
@@ -73,13 +74,21 @@ export function applyCommand(original, request, now = new Date().toISOString()) 
     if(!required(p.eventId)||!required(p.caseId))return error('VALIDATION_ERROR','Review event and case required.');
     const c=w.cases.find(c=>c.id===p.caseId);if(!c)return error('NOT_FOUND','Case not found.',404);
     w.reviewEvents=w.reviewEvents||[];if(!w.reviewEvents.some(e=>e.eventId===p.eventId)){w.reviewEvents.push({eventId:p.eventId,caseId:p.caseId,reason:p.reason,at:now});c.status='review_due';c.version++;c.updatedAt=now;}version=c.version;
-  } else if(op==='sbo.profile.draft.start'||op==='sbo.trend.scan.start'){
-    const capability=op==='sbo.profile.draft.start'?'profileDraft':'trendResearch';
+  } else if(op==='sbo.catalogue.propose'){
+    const proposal=p.proposal;if(!proposal||!['create','update','archive'].includes(proposal.action)||![proposal.name,proposal.definition,proposal.category,proposal.family,proposal.reason].every(required))return error('VALIDATION_ERROR','Catalogue proposals need a definition, category, cluster and evidence-based reason.');
+    if(proposal.action!=='create'&&!w.skills.some(s=>s.id===proposal.skillId))return error('NOT_FOUND','Original catalogue concept not found.',404);
+    w.catalogueProposals=w.catalogueProposals||[];if(w.catalogueProposals.length>=300)return error('LIMIT','Review existing catalogue proposals before creating more.');
+    w.catalogueProposals.push({id:request.idempotencyKey,action:proposal.action,skillId:proposal.action==='create'?undefined:proposal.skillId,name:proposal.name,definition:proposal.definition,category:proposal.category,family:proposal.family,reason:proposal.reason,status:'draft',at:now});
+  } else if(['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start','sbo.support.ask.start'].includes(op)){
+    const capability=({'sbo.profile.draft.start':'profileDraft','sbo.trend.scan.start':'trendResearch','sbo.upskill.propose.start':'upskilling','sbo.support.ask.start':'support'})[op];
     if(!w.runtimeCapabilities?.[capability])return error('INTEGRATION_NOT_READY','This agent is not connected yet. Manual evidence-based editing is available.',503);
-    const c=w.cases.find(c=>c.id===p.caseId);if(!c)return error('NOT_FOUND','Save the case before starting an analysis.',404);
+    const c=w.cases.find(c=>c.id===p.caseId)||(op==='sbo.support.ask.start'?{id:'workspace-support',version:0,title:'Workspace support',unit:'Workspace',question:'Explain the platform and its current capabilities.',owner:'Support requester',targetDate:'',roleId:'',requirements:[],baselines:[],signals:[],measures:[],contributions:[]}:null);if(!c)return error('NOT_FOUND','Save the case before starting an analysis.',404);
     if(op==='sbo.profile.draft.start'&&!c.roleId)return error('VALIDATION_ERROR','Select a global role for profile drafting.');
+    if(op==='sbo.upskill.propose.start'&&!c.requirements.length)return error('VALIDATION_ERROR','Create role requirements before requesting development formats.');
+    if(op==='sbo.support.ask.start'&&!required(p.question))return error('VALIDATION_ERROR','Enter a support question.');
+    if(op==='sbo.trend.scan.start'&&c.researchParameters?.sourceIds?.length===0)return error('VALIDATION_ERROR','Select at least one curated source.');
     if(w.runs.some(r=>r.caseId===c.id&&['queued','running'].includes(r.status)))return error('RUN_ACTIVE','An analysis is already active for this case.',409);
-    const run={id:request.idempotencyKey,caseId:c.id,operation:op,status:'queued',quality:'pending',stage:'Queued for analysis',inputVersion:c.version,startedAt:now,updatedAt:now,inputCase:JSON.parse(JSON.stringify(c)),retryOfRunId:p.retryOfRunId};w.runs.push(run);
+    const run={id:request.idempotencyKey,caseId:c.id,operation:op,status:'queued',quality:'pending',stage:'Queued for analysis',inputVersion:c.version,startedAt:now,updatedAt:now,inputCase:JSON.parse(JSON.stringify(c)),retryOfRunId:p.retryOfRunId,...(op==='sbo.support.ask.start'?{question:p.question.slice(0,4000),section:typeof p.section==='string'?p.section.slice(0,80):'Overview'}:{})};w.runs.push(run);
   } else if(op==='sbo.run.interrupt'){
     const run=w.runs.find(r=>r.id===p.runId);if(!run)return error('NOT_FOUND','Run not found.',404);
     if(['queued','running'].includes(run.status)){run.status='interrupted';run.quality='interrupted';run.updatedAt=now;run.stage='Stopped before result adoption';}
@@ -87,11 +96,12 @@ export function applyCommand(original, request, now = new Date().toISOString()) 
     const run=w.runs.find(r=>r.id===p.runId),c=w.cases.find(c=>c.id===run?.caseId);if(!run||!c||run.status!=='succeeded')return error('RESULT_NOT_READY','No valid result is available.',409);
     if(c.version!==run.inputVersion)return error('VERSION_CONFLICT','This result used an earlier case version. Compare it or start a new analysis.',409);
     if(run.adopted)return error('VALIDATION_ERROR','This result is already adopted.');
-    c.requirements=[...c.requirements,...(run.result?.requirements||[]).filter(r=>!c.requirements.some(x=>x.skillId===r.skillId&&x.task===r.task))];c.signals=[...c.signals,...(run.result?.signals||[])];const problem=failCase(c);if(problem)return error('INVALID_MODEL_OUTPUT',problem);
+    if(run.operation==='sbo.support.ask.start')return error('VALIDATION_ERROR','Support responses do not automatically change a case. Confirm a suggested action or edit the working draft.');
+    c.requirements=[...c.requirements,...(run.result?.requirements||[]).filter(r=>!c.requirements.some(x=>x.skillId===r.skillId&&x.task===r.task))];c.signals=[...c.signals,...(run.result?.signals||[])];c.measures=[...c.measures,...(run.result?.measures||[])];const problem=failCase(c);if(problem)return error('INVALID_MODEL_OUTPUT',problem);
     c.version++;c.updatedAt=now;c.status='draft';c.decisions=[];run.adopted=true;caseId=c.id;version=c.version;
   }else return error('VALIDATION_ERROR','Unsupported operation.');
   if(w.cases.length>200)return error('LIMIT','Pilot case limit reached.');
-  w.revision++;w.audit.push({id:request.idempotencyKey,action:op,at:now,caseId,version,actorType:'shared_pilot_access'});
+  w.revision++;w.audit.push({id:request.idempotencyKey,action:op,at:now,caseId,version,actorType:verifiedContext?.verified?'verified_person':'shared_pilot_access',...(verifiedContext?.verified?{actorId:verifiedContext.email}:{})});
   w.receipts=[...(w.receipts||[]),{key:request.idempotencyKey,fingerprint,at:now,revision:w.revision}];
   return {write:true,previousRevision:original.revision,revision:w.revision,payload:JSON.stringify(w),status:op.endsWith('.start')?202:200,response:result()};
 }
