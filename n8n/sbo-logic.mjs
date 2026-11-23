@@ -31,6 +31,8 @@ export function applyCommand(original, request, now = new Date().toISOString()) 
     if(['baselines','signals','measures','contributions'].some(k=>!Array.isArray(c[k])||c[k].length>500))return 'Invalid case collections.';
     if([...c.requirements,...c.baselines,...c.signals,...c.measures].some(x=>!x||typeof x!=='object'))return 'Invalid case item.';
     if(c.signals.some(s=>!Array.isArray(s.skillIds)))return 'Signal skill links must be an array.';
+    if(c.individualAssessments!==undefined&&(!Array.isArray(c.individualAssessments)||c.individualAssessments.length>500))return 'Invalid individual assessment collection.';
+    for(const a of c.individualAssessments||[]){if(!a||!required(a.personRef)||!required(a.task)||!required(a.reason)||!required(a.assessedBy)||!['self','reviewer'].includes(a.kind)||a.status!=='draft'||!w.skills.some(s=>s.id===a.skillId)||a.current!==null&&(!Number.isInteger(a.current)||a.current<1||a.current>4))return 'Individual assessment requires a subject reference, context, assessor, own anchor and evidence.';}
     if(new Set(c.requirements.map(r=>r.id)).size!==c.requirements.length)return 'Duplicate requirement identifiers.';
     for(const r of c.requirements){
       const skill=w.skills.find(s=>s.id===r.skillId);
@@ -47,10 +49,12 @@ export function applyCommand(original, request, now = new Date().toISOString()) 
     const incoming=p.case;const problem=failCase(incoming);if(problem)return error('VALIDATION_ERROR',problem);
     if(!/^[\w-]{1,100}$/.test(incoming.id))return error('VALIDATION_ERROR','Invalid case identifier.');
     const existing=w.cases.find(c=>c.id===incoming.id);
+    if(JSON.stringify(incoming.individualAssessments||[])!==JSON.stringify(existing?.individualAssessments||[]))return error('IDENTITY_REQUIRED','Individual assessments require verified subject-level access. They are not stored through shared team access.',403);
     if(existing&&incoming.version!==existing.version)return error('VERSION_CONFLICT','The case version changed.',409);
     if(!existing&&incoming.version!==0)return error('VERSION_CONFLICT','New cases start at version zero.',409);
     const next=Object.fromEntries(['id','title','unit','question','owner','targetDate','trigger','roleId','relevance','requirements','baselines','signals','measures'].map(key=>[key,incoming[key]]));
     Object.assign(next,{version:(existing?.version||0)+1,updatedAt:now,status:'draft',decisions:[],contributions:existing?.contributions||[]});
+    next.individualAssessments=existing?.individualAssessments||[];
     w.history=[...(w.history||[]),...(existing?[{caseId:existing.id,version:existing.version,snapshot:existing}]:[])];
     w.cases=existing?w.cases.map(c=>c.id===next.id?next:c):[...w.cases,next];version=next.version;
   } else if(op==='sbo.contribution.submit'){

@@ -36,7 +36,7 @@ assert len(skills)==1012, f'Unexpected reference count: {len(skills)}'
 assert len({s['id'] for s in skills})==len(skills), 'Duplicate skill IDs'
 assert len(roles)==825, f'Expected 825 populated JRD rows, found {len(roles)}'
 assert len({r['id'] for r in roles})==825
-workspace={'schemaVersion':1,'revision':1,'skills':skills,'roles':roles,'cases':[],'runs':[],'audit':[],'sourceManifest':manifest,'mode':'pilot','governanceMode':'coe_final','identityVerified':False}
+workspace={'schemaVersion':1,'revision':1,'skills':skills,'roles':roles,'cases':[],'runs':[],'audit':[],'sourceManifest':manifest,'mode':'pilot','governanceMode':'business_lead_profile_coe_catalogue','identityVerified':False}
 output.parent.mkdir(parents=True,exist_ok=True)
 output.write_text(json.dumps(workspace,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
 print(json.dumps({'skills':974,'competencies':38,'roles':len(roles),'sources':manifest,'privateOutput':str(output)},ensure_ascii=True))

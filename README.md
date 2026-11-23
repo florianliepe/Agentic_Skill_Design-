@@ -6,7 +6,7 @@ A focused Eraneos-style workbench for role profiles, emerging skills and qualita
 
 Version 0.2 is an interactive frontend preview with a synthetic example. The protected n8n workspace and LLM gateway are **not deployed or verified**. Login stays disabled until `NEXT_PUBLIC_SBO_ENABLED=true` is explicitly set after integration tests. Example edits last only for the current browser tab.
 
-Implemented: case intake, canonical concept search and own-anchor detail, evidence-linked core/depth profiles, three-horizon signal radar, gap heatmap, separate catalogue/profile/proficiency/coverage statuses, qualitative SME baseline, proposed development formats, contribution review, explicit saves, draft-preserving API errors, versioned assessment export.
+Implemented: case intake, canonical concept search and own-anchor detail, evidence-linked core/depth profiles, three-horizon signal radar, gap heatmap, separate catalogue/profile/proficiency/coverage statuses, qualitative SME baseline, proposed development formats, contribution review, explicit saves, draft-preserving API errors, versioned assessment export. The synthetic example also supports individual self-assessments and reviewer assessments as separate evidence records. Real individual records are blocked in the shared-access API until verified subject-level access is connected; no automatic employee ranking or averaging is performed.
 
 Backend code includes a tested command reducer, idempotency receipts, revision checks, run state/adoption guards, canonical-output validation and an inactive n8n workspace API template. Its atomic storage behavior still requires a live concurrent-writer test. No live AI worker, search-provider integration, named-role approvals, scheduled review or release publisher is included in this release.
 
@@ -40,7 +40,7 @@ The public-bundle verifier checks credential patterns and, when the private loca
 4. Test unauthorised reads, allowed-origin CORS/preflight, two concurrent writes, identical-request retry after dropped response, invalid input and source immutability. Activate only the isolated workflow after those checks.
 5. Implement/verify an asynchronous worker using `n8n/sbo-agent.mjs`: atomic queued-to-running claim, bounded gateway call, output validation, reread and CAS completion, no completion after interruption. Expired running leases become timed_out; retries create new run IDs. Trend research additionally needs a verified evidence-search provider and source validation.
 6. Enable agent capabilities only after worker acceptance. Enable the frontend connection with repository variables `NEXT_PUBLIC_SBO_API_URL` and `NEXT_PUBLIC_SBO_ENABLED=true` after smoke testing.
-7. Connect verified identities and confirm the governance policy before implementing actual approval/publishing commands. Shared pilot access cannot approve.
+7. Connect verified identities before implementing actual approval/publishing commands and person-level storage. Confirmed governance: HR BP validates, Business Lead releases profiles, CoE approves catalogue changes. JRD changes remain subject to approval. Shared pilot access cannot approve.
 
 ## Contracts
 
