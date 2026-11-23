@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-23",
+  "automatedTests": 42,
+  "technicalWorkflowAcceptance": [
+    {
+      "operation": "sbo.profile.draft.start",
+      "status": "succeeded",
+      "model": "gpt-6-luna",
+      "attempts": 1,
+      "modelMs": 986,
+      "totalMs": 37025,
+      "requirements": 2,
+      "quality": "partial_with_residuals"
+    },
+    {
+      "operation": "sbo.trend.scan.start",
+      "status": "succeeded",
+      "model": "gpt-6-luna",
+      "attempts": 2,
+      "modelMs": 59959,
+      "totalMs": 106591,
+      "signals": 1,
+      "quality": "partial_sources"
+    },
+    {
+      "operation": "sbo.upskill.propose.start",
+      "status": "succeeded",
+      "model": "gpt-6-luna",
+      "attempts": 1,
+      "modelMs": 22465,
+      "totalMs": 192281,
+      "measures": 4,
+      "quality": "partial_with_residuals"
+    },
+    {
+      "operation": "sbo.support.ask.start",
+      "status": "succeeded",
+      "model": "gpt-6-luna",
+      "attempts": 1,
+      "modelMs": 8579,
+      "totalMs": 16755,
+      "quality": "partial_with_residuals"
+    }
+  ],
+  "projection": {
+    "storageBytes": 2228908,
+    "bootstrapBytes": 2153390,
+    "statusBytes": 78898,
+    "statusReductionPct": 96.5
+  },
+  "authBoundary": [
+    {
+      "status": 401,
+      "code": "SESSION_REQUIRED",
+      "ms": 836,
+      "workspaceExposed": false
+    },
+    {
+      "status": 401,
+      "code": "SESSION_REQUIRED",
+      "ms": 1444,
+      "workspaceExposed": false
+    },
+    {
+      "status": 403,
+      "code": "FORBIDDEN",
+      "ms": 1600,
+      "workspaceExposed": false
+    }
+  ],
+  "browser": "Synthetic qualitative gap save passed: unknown proficiency retained alongside partial coverage and P1.",
+  "personalBrowser": "No new OTP was submitted; a protected human-session walkthrough was not repeated.",
+  "limitations": [
+    "Historical platform HTTP 503 cause could not be established retrospectively.",
+    "Reduced live research coverage; date-limited cache references are labelled.",
+    "Model times are individual observations, not an SLA."
+  ]
+}
