@@ -1,0 +1,511 @@
+{
+  "name": "Skill Design Studio | personal access v1",
+  "nodes": [
+    {
+      "id": "personal-access",
+      "name": "Personal access",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agentic-skill-design-auth-v1",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://florianliepe.github.io,http://localhost:3000,http://127.0.0.1:3000"
+        }
+      },
+      "webhookId": "agentic-skill-design-auth-v1"
+    },
+    {
+      "id": "fresh-entropy",
+      "name": "Fresh entropy",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        180,
+        300
+      ],
+      "parameters": {
+        "action": "generate",
+        "dataPropertyName": "entropy",
+        "encodingType": "hex",
+        "stringLength": 64
+      }
+    },
+    {
+      "id": "read-sign-in-state",
+      "name": "Read sign-in state",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        360,
+        300
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "SBO_AUTH_TABLE_ID",
+          "mode": "id"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "workspace",
+              "condition": "eq",
+              "keyValue": "auth"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "validate-personal-access",
+      "name": "Validate personal access",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// node_modules/@noble/hashes/esm/utils.js\nfunction isBytes(a) {\n  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === \"Uint8Array\";\n}\nfunction abytes(b, ...lengths) {\n  if (!isBytes(b))\n    throw new Error(\"Uint8Array expected\");\n  if (lengths.length > 0 && !lengths.includes(b.length))\n    throw new Error(\"Uint8Array expected of length \" + lengths + \", got length=\" + b.length);\n}\nfunction aexists(instance, checkFinished = true) {\n  if (instance.destroyed)\n    throw new Error(\"Hash instance has been destroyed\");\n  if (checkFinished && instance.finished)\n    throw new Error(\"Hash#digest() has already been called\");\n}\nfunction aoutput(out, instance) {\n  abytes(out);\n  const min = instance.outputLen;\n  if (out.length < min) {\n    throw new Error(\"digestInto() expects output buffer of length at least \" + min);\n  }\n}\nfunction clean(...arrays) {\n  for (let i = 0; i < arrays.length; i++) {\n    arrays[i].fill(0);\n  }\n}\nfunction createView(arr) {\n  return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);\n}\nfunction rotr(word, shift) {\n  return word << 32 - shift | word >>> shift;\n}\nfunction utf8ToBytes(str) {\n  if (typeof str !== \"string\")\n    throw new Error(\"string expected\");\n  return new Uint8Array(new TextEncoder().encode(str));\n}\nfunction toBytes(data) {\n  if (typeof data === \"string\")\n    data = utf8ToBytes(data);\n  abytes(data);\n  return data;\n}\nvar Hash = class {\n};\nfunction createHasher(hashCons) {\n  const hashC = (msg) => hashCons().update(toBytes(msg)).digest();\n  const tmp = hashCons();\n  hashC.outputLen = tmp.outputLen;\n  hashC.blockLen = tmp.blockLen;\n  hashC.create = () => hashCons();\n  return hashC;\n}\n\n// node_modules/@noble/hashes/esm/_md.js\nfunction setBigUint64(view, byteOffset, value, isLE) {\n  if (typeof view.setBigUint64 === \"function\")\n    return view.setBigUint64(byteOffset, value, isLE);\n  const _32n = BigInt(32);\n  const _u32_max = BigInt(4294967295);\n  const wh = Number(value >> _32n & _u32_max);\n  const wl = Number(value & _u32_max);\n  const h = isLE ? 4 : 0;\n  const l = isLE ? 0 : 4;\n  view.setUint32(byteOffset + h, wh, isLE);\n  view.setUint32(byteOffset + l, wl, isLE);\n}\nfunction Chi(a, b, c) {\n  return a & b ^ ~a & c;\n}\nfunction Maj(a, b, c) {\n  return a & b ^ a & c ^ b & c;\n}\nvar HashMD = class extends Hash {\n  constructor(blockLen, outputLen, padOffset, isLE) {\n    super();\n    this.finished = false;\n    this.length = 0;\n    this.pos = 0;\n    this.destroyed = false;\n    this.blockLen = blockLen;\n    this.outputLen = outputLen;\n    this.padOffset = padOffset;\n    this.isLE = isLE;\n    this.buffer = new Uint8Array(blockLen);\n    this.view = createView(this.buffer);\n  }\n  update(data) {\n    aexists(this);\n    data = toBytes(data);\n    abytes(data);\n    const { view, buffer, blockLen } = this;\n    const len = data.length;\n    for (let pos = 0; pos < len; ) {\n      const take = Math.min(blockLen - this.pos, len - pos);\n      if (take === blockLen) {\n        const dataView = createView(data);\n        for (; blockLen <= len - pos; pos += blockLen)\n          this.process(dataView, pos);\n        continue;\n      }\n      buffer.set(data.subarray(pos, pos + take), this.pos);\n      this.pos += take;\n      pos += take;\n      if (this.pos === blockLen) {\n        this.process(view, 0);\n        this.pos = 0;\n      }\n    }\n    this.length += data.length;\n    this.roundClean();\n    return this;\n  }\n  digestInto(out) {\n    aexists(this);\n    aoutput(out, this);\n    this.finished = true;\n    const { buffer, view, blockLen, isLE } = this;\n    let { pos } = this;\n    buffer[pos++] = 128;\n    clean(this.buffer.subarray(pos));\n    if (this.padOffset > blockLen - pos) {\n      this.process(view, 0);\n      pos = 0;\n    }\n    for (let i = pos; i < blockLen; i++)\n      buffer[i] = 0;\n    setBigUint64(view, blockLen - 8, BigInt(this.length * 8), isLE);\n    this.process(view, 0);\n    const oview = createView(out);\n    const len = this.outputLen;\n    if (len % 4)\n      throw new Error(\"_sha2: outputLen should be aligned to 32bit\");\n    const outLen = len / 4;\n    const state = this.get();\n    if (outLen > state.length)\n      throw new Error(\"_sha2: outputLen bigger than state\");\n    for (let i = 0; i < outLen; i++)\n      oview.setUint32(4 * i, state[i], isLE);\n  }\n  digest() {\n    const { buffer, outputLen } = this;\n    this.digestInto(buffer);\n    const res = buffer.slice(0, outputLen);\n    this.destroy();\n    return res;\n  }\n  _cloneInto(to) {\n    to || (to = new this.constructor());\n    to.set(...this.get());\n    const { blockLen, buffer, length, finished, destroyed, pos } = this;\n    to.destroyed = destroyed;\n    to.finished = finished;\n    to.length = length;\n    to.pos = pos;\n    if (length % blockLen)\n      to.buffer.set(buffer);\n    return to;\n  }\n  clone() {\n    return this._cloneInto();\n  }\n};\nvar SHA256_IV = /* @__PURE__ */ Uint32Array.from([\n  1779033703,\n  3144134277,\n  1013904242,\n  2773480762,\n  1359893119,\n  2600822924,\n  528734635,\n  1541459225\n]);\n\n// node_modules/@noble/hashes/esm/sha2.js\nvar SHA256_K = /* @__PURE__ */ Uint32Array.from([\n  1116352408,\n  1899447441,\n  3049323471,\n  3921009573,\n  961987163,\n  1508970993,\n  2453635748,\n  2870763221,\n  3624381080,\n  310598401,\n  607225278,\n  1426881987,\n  1925078388,\n  2162078206,\n  2614888103,\n  3248222580,\n  3835390401,\n  4022224774,\n  264347078,\n  604807628,\n  770255983,\n  1249150122,\n  1555081692,\n  1996064986,\n  2554220882,\n  2821834349,\n  2952996808,\n  3210313671,\n  3336571891,\n  3584528711,\n  113926993,\n  338241895,\n  666307205,\n  773529912,\n  1294757372,\n  1396182291,\n  1695183700,\n  1986661051,\n  2177026350,\n  2456956037,\n  2730485921,\n  2820302411,\n  3259730800,\n  3345764771,\n  3516065817,\n  3600352804,\n  4094571909,\n  275423344,\n  430227734,\n  506948616,\n  659060556,\n  883997877,\n  958139571,\n  1322822218,\n  1537002063,\n  1747873779,\n  1955562222,\n  2024104815,\n  2227730452,\n  2361852424,\n  2428436474,\n  2756734187,\n  3204031479,\n  3329325298\n]);\nvar SHA256_W = /* @__PURE__ */ new Uint32Array(64);\nvar SHA256 = class extends HashMD {\n  constructor(outputLen = 32) {\n    super(64, outputLen, 8, false);\n    this.A = SHA256_IV[0] | 0;\n    this.B = SHA256_IV[1] | 0;\n    this.C = SHA256_IV[2] | 0;\n    this.D = SHA256_IV[3] | 0;\n    this.E = SHA256_IV[4] | 0;\n    this.F = SHA256_IV[5] | 0;\n    this.G = SHA256_IV[6] | 0;\n    this.H = SHA256_IV[7] | 0;\n  }\n  get() {\n    const { A, B, C, D, E, F, G, H } = this;\n    return [A, B, C, D, E, F, G, H];\n  }\n  // prettier-ignore\n  set(A, B, C, D, E, F, G, H) {\n    this.A = A | 0;\n    this.B = B | 0;\n    this.C = C | 0;\n    this.D = D | 0;\n    this.E = E | 0;\n    this.F = F | 0;\n    this.G = G | 0;\n    this.H = H | 0;\n  }\n  process(view, offset) {\n    for (let i = 0; i < 16; i++, offset += 4)\n      SHA256_W[i] = view.getUint32(offset, false);\n    for (let i = 16; i < 64; i++) {\n      const W15 = SHA256_W[i - 15];\n      const W2 = SHA256_W[i - 2];\n      const s0 = rotr(W15, 7) ^ rotr(W15, 18) ^ W15 >>> 3;\n      const s1 = rotr(W2, 17) ^ rotr(W2, 19) ^ W2 >>> 10;\n      SHA256_W[i] = s1 + SHA256_W[i - 7] + s0 + SHA256_W[i - 16] | 0;\n    }\n    let { A, B, C, D, E, F, G, H } = this;\n    for (let i = 0; i < 64; i++) {\n      const sigma1 = rotr(E, 6) ^ rotr(E, 11) ^ rotr(E, 25);\n      const T1 = H + sigma1 + Chi(E, F, G) + SHA256_K[i] + SHA256_W[i] | 0;\n      const sigma0 = rotr(A, 2) ^ rotr(A, 13) ^ rotr(A, 22);\n      const T2 = sigma0 + Maj(A, B, C) | 0;\n      H = G;\n      G = F;\n      F = E;\n      E = D + T1 | 0;\n      D = C;\n      C = B;\n      B = A;\n      A = T1 + T2 | 0;\n    }\n    A = A + this.A | 0;\n    B = B + this.B | 0;\n    C = C + this.C | 0;\n    D = D + this.D | 0;\n    E = E + this.E | 0;\n    F = F + this.F | 0;\n    G = G + this.G | 0;\n    H = H + this.H | 0;\n    this.set(A, B, C, D, E, F, G, H);\n  }\n  roundClean() {\n    clean(SHA256_W);\n  }\n  destroy() {\n    this.set(0, 0, 0, 0, 0, 0, 0, 0);\n    clean(this.buffer);\n  }\n};\nvar sha256 = /* @__PURE__ */ createHasher(() => new SHA256());\n\n// node_modules/@noble/hashes/esm/sha256.js\nvar sha2562 = sha256;\n\n// n8n/sbo-auth.mjs\nvar hash = (value) => Buffer.from(sha2562(new Uint8Array(Buffer.from(value, \"utf8\")))).toString(\"hex\");\nvar sessionHash = (token) => hash(\"skill-design/session/\" + token);\nfunction constantEqual(a, b) {\n  if (typeof a !== \"string\" || typeof b !== \"string\" || a.length !== b.length) return false;\n  let difference = 0;\n  for (let i = 0; i < a.length; i++) difference |= a.charCodeAt(i) ^ b.charCodeAt(i);\n  return difference === 0;\n}\nfunction applyAuth(original, request, entropy, now = Date.now()) {\n  const store = JSON.parse(JSON.stringify(original)), fail = (status, code, message) => ({ write: false, status, response: { ok: false, error: { code, message } } });\n  if (!request || typeof request !== \"object\" || JSON.stringify(request).length > 5e5 || ![\"request_code\", \"verify_code\", \"logout\", \"workspace\"].includes(request.action)) return fail(422, \"VALIDATION_ERROR\", \"Invalid sign-in request.\");\n  if (!/^[a-f0-9]{64,}$/i.test(entropy || \"\")) return fail(503, \"ENTROPY_UNAVAILABLE\", \"Sign-in is temporarily unavailable.\");\n  store.sessions = (store.sessions || []).filter((s) => s.expiresAt > now);\n  store.challenges = (store.challenges || []).filter((c) => c.expiresAt > now && !c.used);\n  store.attempts = (store.attempts || []).filter((a) => a.at > now - 15 * 6e4);\n  const result = (status, response, extra = {}) => ({ write: true, status, response, store, ...extra });\n  if (request.action === \"request_code\") {\n    const email = String(request.email || \"\").trim().toLowerCase();\n    if (!/^[^\\s@,;<>]+@eraneos\\.com$/.test(email) || email.length > 254) return fail(422, \"EMAIL_NOT_ELIGIBLE\", \"Use your approved Eraneos email address.\");\n    if (store.attempts.length >= 100 || store.attempts.filter((a) => a.principal === hash(email) && a.kind === \"code\").length >= 3) return fail(429, \"RATE_LIMIT\", \"Please wait 15 minutes before requesting another code.\");\n    store.attempts.push({ principal: hash(email), kind: \"code\", at: now });\n    const member2 = store.members?.find((m) => m.email === email && m.active !== false), challengeId = entropy.slice(0, 32);\n    const accepted = { ok: true, challengeId, message: \"If this address has workspace access, a sign-in code has been sent. It expires in 10 minutes.\" };\n    if (!member2) return result(200, accepted);\n    const range = 9e7, limit = Math.floor(4294967296 / range) * range;\n    let value, index = 0;\n    do {\n      const bytes = hash(\"skill-design/code/\" + entropy + \"/\" + index++);\n      value = parseInt(bytes.slice(0, 8), 16);\n    } while (value >= limit);\n    const code = String(1e7 + value % range);\n    store.challenges = store.challenges.filter((c) => c.email !== email);\n    store.challenges.push({ id: challengeId, email, hash: hash(challengeId + \":\" + code), expiresAt: now + 10 * 6e4, attempts: 0, used: false });\n    return result(200, accepted, { pendingMail: { to: email, code, purpose: \"skill_design_login\" } });\n  }\n  if (request.action === \"verify_code\") {\n    if (typeof request.challengeId !== \"string\" || !/^\\d{8}$/.test(request.code || \"\")) return fail(401, \"INVALID_CODE\", \"The code is invalid, expired or already used.\");\n    const challenge = store.challenges.find((c) => c.id === request.challengeId), member2 = store.members?.find((m) => m.email === challenge?.email && m.active !== false);\n    if (!challenge || !member2 || challenge.used || challenge.attempts >= 5) return fail(401, \"INVALID_CODE\", \"The code is invalid, expired or already used.\");\n    challenge.attempts++;\n    if (!constantEqual(challenge.hash, hash(challenge.id + \":\" + request.code))) return result(401, { ok: false, error: { code: \"INVALID_CODE\", message: \"The code is invalid, expired or already used.\" } });\n    challenge.used = true;\n    const token = hash(\"skill-design/token/\" + entropy), expiresAt = now + 8 * 36e5;\n    store.sessions.push({ hash: sessionHash(token), email: member2.email, expiresAt });\n    store.sessions = store.sessions.slice(-100);\n    return result(200, { ok: true, session: { token, expiresAt, user: { email: member2.email, roles: member2.roles } } });\n  }\n  if (typeof request.token !== \"string\" || request.token.length > 256) return fail(401, \"SESSION_REQUIRED\", \"Please sign in again.\");\n  const found = store.sessions.find((s) => constantEqual(s.hash, sessionHash(request.token))), member = store.members?.find((m) => m.email === found?.email && m.active !== false);\n  if (!found || !member) return fail(401, \"SESSION_REQUIRED\", \"Please sign in again.\");\n  if (request.action === \"logout\") {\n    store.sessions = store.sessions.filter((s) => s !== found);\n    return result(200, { ok: true });\n  }\n  const command = request.request?.command;\n  const reads = [\"sbo.workspace.read\", \"sbo.run.status\", \"sbo.run.result\", \"sbo.tna.export\"];\n  if (typeof command !== \"string\") return fail(422, \"VALIDATION_ERROR\", \"A workspace command is required.\");\n  if (!reads.includes(command) && !member.roles.some((r) => [\"sme\", \"hrbp\", \"business\", \"coe\"].includes(r))) return fail(403, \"FORBIDDEN\", \"Your workspace role allows reading only.\");\n  if ([\"sbo.coe.decide\", \"sbo.business.decide\", \"sbo.release.publish\"].includes(command)) return fail(403, \"RELEASE_NOT_CONNECTED\", \"Named sign-in is active; the formal release publisher is not connected yet.\");\n  return { write: false, status: 200, response: { ok: true }, forward: { ...request.request, authContext: { verified: true, email: member.email, roles: member.roles } } };\n}\n/*! Bundled license information:\n\n@noble/hashes/esm/utils.js:\n  (*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) *)\n*/\n\nconst row=$input.first().json;const input=$(\"Personal access\").first().json;const origin=input.headers?.origin;let outcome;if(origin&&![\"https://florianliepe.github.io\",\"http://localhost:3000\",\"http://127.0.0.1:3000\"].includes(origin))outcome={status:403,response:{ok:false,error:{code:\"FORBIDDEN\",message:\"Origin not allowed\"}}};else if(!row.payload)outcome={status:503,response:{ok:false,error:{code:\"AUTH_UNAVAILABLE\",message:\"Sign-in is not configured.\"}}};else {try{outcome=applyAuth(JSON.parse(row.payload),input.body,$(\"Fresh entropy\").first().json.entropy);}catch{outcome={status:422,response:{ok:false,error:{code:\"VALIDATION_ERROR\",message:\"Invalid sign-in request.\"}}};}}if(outcome.write){outcome.previousRevision=row.revision;outcome.revision=row.revision+1;outcome.payload=JSON.stringify(outcome.store);delete outcome.store;}return [{json:outcome}];"
+      }
+    },
+    {
+      "id": "commit-authentication",
+      "name": "Commit authentication",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "write",
+              "leftValue": "={{ !!$json.write }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "save-unchanged-sign-in-revision",
+      "name": "Save unchanged sign-in revision",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "SBO_AUTH_TABLE_ID",
+          "mode": "id"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "workspace",
+              "condition": "eq",
+              "keyValue": "auth"
+            },
+            {
+              "keyName": "revision",
+              "condition": "eq",
+              "keyValue": "={{ $json.previousRevision }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "revision": "={{ $json.revision }}",
+            "payload": "={{ $json.payload }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "authentication-commit-receipt",
+      "name": "Authentication commit receipt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const outcome=$(\"Validate personal access\").first().json;return [{json:$input.first().json.payload?outcome:{status:409,response:{ok:false,error:{code:\"AUTH_CONFLICT\",message:\"Another sign-in request was processed. Please retry.\"}}}}];"
+      }
+    },
+    {
+      "id": "send-a-login-code",
+      "name": "Send a login code",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1260,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pendingMail",
+              "leftValue": "={{ !!$json.pendingMail }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "deliver-skill-studio-code",
+      "name": "Deliver Skill Studio code",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        500
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "SBO_MAIL_WORKFLOW_ID",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "to": "={{ $json.pendingMail.to }}",
+            "code": "={{ $json.pendingMail.code }}",
+            "purpose": "skill_design_login"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "confirm-mail-delivery",
+      "name": "Confirm mail delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const outcome=$(\"Authentication commit receipt\").first().json;return [{json:$json.accepted===true?outcome:{status:503,response:{ok:false,error:{code:\"MAIL_UNAVAILABLE\",message:\"The sign-in email could not be sent. Try again later.\"}}}}];"
+      }
+    },
+    {
+      "id": "forward-verified-command",
+      "name": "Forward verified command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "forward",
+              "leftValue": "={{ !!$json.forward }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "private-workspace-operation",
+      "name": "Private workspace operation",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1620,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "SBO_INTERNAL_API_ID",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request": "={{ $json.forward }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "respond-personally",
+      "name": "Respond personally",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1840,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Personal access": {
+      "main": [
+        [
+          {
+            "node": "Fresh entropy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fresh entropy": {
+      "main": [
+        [
+          {
+            "node": "Read sign-in state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read sign-in state": {
+      "main": [
+        [
+          {
+            "node": "Validate personal access",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate personal access": {
+      "main": [
+        [
+          {
+            "node": "Commit authentication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Commit authentication": {
+      "main": [
+        [
+          {
+            "node": "Save unchanged sign-in revision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Forward verified command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save unchanged sign-in revision": {
+      "main": [
+        [
+          {
+            "node": "Authentication commit receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authentication commit receipt": {
+      "main": [
+        [
+          {
+            "node": "Send a login code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a login code": {
+      "main": [
+        [
+          {
+            "node": "Deliver Skill Studio code",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Forward verified command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deliver Skill Studio code": {
+      "main": [
+        [
+          {
+            "node": "Confirm mail delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm mail delivery": {
+      "main": [
+        [
+          {
+            "node": "Respond personally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forward verified command": {
+      "main": [
+        [
+          {
+            "node": "Private workspace operation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond personally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Private workspace operation": {
+      "main": [
+        [
+          {
+            "node": "Respond personally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 60
+  }
+}

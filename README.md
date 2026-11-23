@@ -2,13 +2,17 @@
 
 A focused Eraneos-style workbench for role profiles, emerging skills and qualitative department capability assessment. Static Next.js export for GitHub Pages. No PMO or project management surface.
 
-## Release status
+## Feedback refinement release
+
+Personal email-code access, four connected specialist functions, parameter-driven trend research, upskilling formats, contextual support, searchable role selection, profile/JRD comparison and readable result review are described in [Feedback refinement](docs/FEEDBACK_REFINEMENT.md). The new public login uses its own n8n sign-in workflow and server-verified workspace membership. No internal source content is bundled.
+
+## Initial release status
 
 The protected n8n workspace and asynchronous mapping worker were deployed and tested on 23 November 2026. The workspace contains 1,012 source concepts (974 skills and 38 competencies) and 825 global roles behind header authentication. The mapping worker calls the Eraneos gateway and returns evidence-bound drafts for SME review. Enable the frontend with `NEXT_PUBLIC_SBO_ENABLED=true` only after the live acceptance checks below pass. The synthetic example remains available; its edits last only for the current browser tab.
 
 Implemented: case intake, canonical concept search and own-anchor detail, evidence-linked core/depth profiles, three-horizon signal radar, gap heatmap, separate catalogue/profile/proficiency/coverage statuses, qualitative SME baseline, proposed development formats, contribution review, explicit saves, draft-preserving API errors, versioned assessment export. The synthetic example also supports individual self-assessments and reviewer assessments as separate evidence records. Real individual records are blocked in the shared-access API until verified subject-level access is connected; no automatic employee ranking or averaging is performed.
 
-The command reducer, idempotent retries and atomic concurrent-write protection have passed live checks (one concurrent save succeeds; the other receives HTTP 409). Unauthorised data reads and shared-access approvals are rejected. The live mapping worker validates canonical identities and exact JRD evidence before making a result available. Trend research, named-role approvals, scheduled business review and a release publisher are not connected. Real individual records still require subject-level identity.
+The command reducer, idempotent retries and atomic concurrent-write protection have passed live checks (one concurrent save succeeds; the other receives HTTP 409). Unauthorised data reads and shared-access approvals are rejected. The live mapping worker validates canonical identities and exact JRD evidence before making a result available. The refinement connects curated-source trend research, upskilling and support. Formal named-role approvals, scheduled business review and a release publisher remain separate integrations. Real individual records still require subject-level identity.
 
 ## Local development
 
@@ -24,7 +28,7 @@ npm run workflow:build
 npm run build
 ```
 
-`output: export` is intentional. GitHub Pages cannot host Next.js API routes. The browser calls a separately authenticated workspace API through `src/lib/sbo-client.ts`. Team access remains in memory; neither credentials nor internal workspaces use browser localStorage.
+`output: export` is intentional. GitHub Pages cannot host Next.js API routes. The browser calls a separately authenticated workspace API through `src/lib/sbo-client.ts`. Personal session tokens use sessionStorage for tab-scoped reload recovery and are revoked on logout. Internal workspaces and evidence are not stored in browser storage. The legacy header credential remains a technical migration endpoint until personal-access publication is verified.
 
 ## Data boundary
 
@@ -38,7 +42,7 @@ The public-bundle verifier checks credential patterns and, when the private loca
 2. Provision an isolated workspace data table with `workspace` (string), `revision` (number), `payload` (string), one row `main`. Import the private snapshot only into the authorised protected service. Confirm size limits and backup/restore.
 3. Generate `n8n/sbo-workspace-api.template.json`; replace the table and existing header-auth credential placeholders. The credential must validate `x-n8n-webhook-secret`. Do not commit resolved credentials or private seed data.
 4. Test unauthorised reads, allowed-origin CORS/preflight, two concurrent writes, identical-request retry after dropped response, invalid input and source immutability. Activate only the isolated workflow after those checks.
-5. Verify the asynchronous worker template using `n8n/sbo-agent.mjs`: atomic queued-to-running claim, bounded gateway call, output validation, reread and CAS completion, no completion after interruption. Model timeout is 120 seconds, workflow timeout 180 seconds and claim lease 240 seconds. Expired running leases become timed_out; retries create new run IDs. A completion CAS conflict currently discards the uncommitted proposal and eventually times out the lease; result-artifact recovery remains an explicit follow-up. Trend research additionally needs a verified evidence-search provider and source validation.
+5. Verify the asynchronous worker template using `n8n/sbo-agent.mjs`: atomic queued-to-running claim, bounded gateway call, output validation, reread and CAS completion, no completion after interruption. Model timeout is 120 seconds, workflow timeout 180 seconds and claim lease 240 seconds. Expired running leases become timed_out; retries create new run IDs. A completion CAS conflict currently discards the uncommitted proposal and eventually times out the lease; result-artifact recovery remains an explicit follow-up. The refinement uses direct, allowlisted substantive source retrieval and exact quotation validation. It does not claim unrestricted internet search.
 6. Enable agent capabilities only after worker acceptance. Enable the frontend connection with repository variables `NEXT_PUBLIC_SBO_API_URL` and `NEXT_PUBLIC_SBO_ENABLED=true` after smoke testing.
 7. Connect verified identities before implementing actual approval/publishing commands and person-level storage. Confirmed governance: HR BP validates, Business Lead releases profiles, CoE approves catalogue changes. JRD changes remain subject to approval. Shared pilot access cannot approve.
 

@@ -7,6 +7,6 @@ const w=JSON.parse(template.replaceAll('SBO_WORKSPACE_TABLE_ID',c.tableId).repla
 if(c.workerId){const old=await api('/workflows/'+c.workerId);if(old.name!==w.name)throw new Error('Unrelated workflow refused');await api('/workflows/'+c.workerId,'PUT',w);}else{const result=await api('/workflows','POST',w);c.workerId=result.id;await fs.writeFile(p,JSON.stringify(c,null,2));}
 await api('/workflows/'+c.workerId+'/activate','POST',{});
 const rows=await api('/data-tables/'+c.tableId+'/rows?limit=2');if(rows.data.length!==1)throw new Error('Expected exactly one workspace row');
-const row=rows.data[0],data=JSON.parse(row.payload);data.runtimeCapabilities={profileDraft:true,trendResearch:false};data.revision++;
+const row=rows.data[0],data=JSON.parse(row.payload);data.runtimeCapabilities={...data.runtimeCapabilities,profileDraft:true};data.revision++;
 await api('/data-tables/'+c.tableId+'/rows/update','PATCH',{filter:{type:'and',filters:[{columnName:'workspace',condition:'eq',value:'main'},{columnName:'revision',condition:'eq',value:row.revision}]},data:{revision:data.revision,payload:JSON.stringify(data)}});
 console.log({workerId:c.workerId,active:true,profileDraft:'enabled for live acceptance; public login remains disabled until acceptance passes'});

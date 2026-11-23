@@ -5,9 +5,9 @@ export function claimNextRun(workspace,now=new Date().toISOString()){
   const expired=w.runs.find(r=>r.status==='running'&&r.leaseUntil&&r.leaseUntil<now);
   if(expired){expired.status='timed_out';expired.quality='incomplete';expired.stage='Worker lease expired';expired.error='The analysis did not complete within its lease. Start a new run to retry.';expired.updatedAt=now;w.revision++;return {write:true,previousRevision:workspace.revision,revision:w.revision,payload:JSON.stringify(w),runId:null};}
   if(w.runs.some(r=>r.status==='running'))return {write:false};
-  const run=w.runs.find(r=>r.status==='queued'&&r.operation==='sbo.profile.draft.start');
+  const run=w.runs.find(r=>r.status==='queued'&&['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start','sbo.support.ask.start'].includes(r.operation));
   if(!run)return {write:false};
-  run.status='running';run.stage='Drafting against canonical concepts';run.updatedAt=now;run.leaseUntil=new Date(Date.parse(now)+240000).toISOString();run.agentVersion=agentVersion;run.inputSources=JSON.parse(JSON.stringify(w.sourceManifest));w.revision++;
+  run.status='running';run.stage=run.operation==='sbo.trend.scan.start'?'Researching selected sources':run.operation==='sbo.upskill.propose.start'?'Preparing development formats':run.operation==='sbo.support.ask.start'?'Preparing contextual support':'Drafting against canonical concepts';run.updatedAt=now;run.leaseUntil=new Date(Date.parse(now)+(run.operation==='sbo.trend.scan.start'?420000:240000)).toISOString();run.agentVersion=agentVersion;run.inputSources=JSON.parse(JSON.stringify(w.sourceManifest));w.revision++;
   return {write:true,previousRevision:workspace.revision,revision:w.revision,payload:JSON.stringify(w),runId:run.id};
 }
 export function prepareMapping(workspace,run){
