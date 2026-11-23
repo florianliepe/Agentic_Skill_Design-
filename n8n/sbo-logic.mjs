@@ -104,7 +104,7 @@ export function applyCommand(original, request, now = new Date().toISOString(), 
     c.version++;c.updatedAt=now;c.status='draft';c.decisions=[];run.adopted=true;caseId=c.id;version=c.version;
   }else return error('VALIDATION_ERROR','Unsupported operation.');
   if(w.cases.length>200)return error('LIMIT','Pilot case limit reached.');
-  w.revision++;w.audit.push({id:request.idempotencyKey,action:op,at:now,caseId,version,actorType:verifiedContext?.verified?'verified_person':'shared_pilot_access',...(verifiedContext?.verified?{actorId:verifiedContext.email}:{})});
+  w.revision++;w.audit.push({id:request.idempotencyKey,action:op,at:now,caseId,version,actorType:verifiedContext?.technical?'technical_acceptance':verifiedContext?.verified?'verified_person':'shared_pilot_access',...(verifiedContext?.verified?{actorId:verifiedContext.email}:{})});
   w.receipts=[...(w.receipts||[]),{key:request.idempotencyKey,fingerprint,at:now,revision:w.revision}];
   return {write:true,previousRevision:original.revision,revision:w.revision,payload:JSON.stringify(w),status:op.endsWith('.start')?202:200,response:result()};
 }

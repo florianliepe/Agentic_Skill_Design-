@@ -42,6 +42,10 @@ Each provider attempt has a 45-second timeout. A transient server or connection 
 
 HTTP Request nodes replace the LangChain model wrapper so provider status, finish reason and output can be classified at the gateway boundary. Diagnostics contain the selected model, attempt count, elapsed model time and a safe error code. They exclude raw provider errors, headers, prompts and credentials. Completion conflicts re-read storage and reapply the same validated result up to three times; they do not repeat the model call. A remaining conflict or expired lease requires explicit recovery and never creates a synthetic success.
 
+## Agent handoff integrity
+
+Trend retrieval always includes the canonical skills already present in the input role profile, alongside newly retrieved candidates. The linked case regression exposed a failure when retrieval pruning excluded existing profile skills even though they remained in the model context. Those IDs now remain explicitly eligible; canonical identity and source validation stay strict.
+
 ## Data and frontend performance
 
 The initial authenticated load supplies the immutable catalogue and global JRDs. Later status responses and compact command receipts reuse those records from memory, scoped to the current access token. No internal workspace is added to browser persistent storage. Public responses omit history, idempotency receipts and run input snapshots. A response with an earlier workspace revision cannot roll the client back.
@@ -65,3 +69,9 @@ Automated acceptance covers compact projection, cache merge ordering, provider t
 Do not change shared n8n infrastructure settings as part of this release. For sustained multi-user load, measure main-process and database pressure before introducing Redis-backed queue mode, dedicated workers, webhook processors or a production concurrency limit. A global limit can also delay webhook acknowledgements; isolated application backpressure is not a substitute for capacity planning. [n8n concurrency control](https://docs.n8n.io/hosting/scaling/concurrency-control/), [n8n queue mode](https://docs.n8n.io/hosting/scaling/queue-mode/).
 
 Gateway error classification and retry policy follow the separation of connection, rate-limit and status errors in the [OpenAI SDK](https://github.com/openai/openai-node#retries) while keeping retries explicit at one application boundary. n8n HTTP Request does not automatically honour Retry-After; the workflow must make that decision. [n8n rate limits](https://docs.n8n.io/integrations/builtin/rate-limits/).
+
+## Live acceptance results
+
+All four specialist functions succeeded in labelled technical n8n cases. Role mapping returned two requirements; trends returned one source-bound signal after a real fallback from Sonnet to GPT Luna; upskilling returned four measures; support returned a contextual response. Observed model time was approximately 1 second for mapping, 60 seconds for the two-attempt trend run, 22 seconds for upskilling and 9 seconds for support. Complete queue-plus-processing time was respectively 37, 107, 192 and 17 seconds during the four-job batch. These are sample observations, not an SLA.
+
+All 43 automated tests and the deployed frontend build passed. The browser test saved a synthetic assessment with partial coverage while proficiency remained unknown. Forged session/role and untrusted-origin requests returned 401/403 without workspace data. Temporary acceptance drivers are inactive. The protected human-session walkthrough was not repeated because no new OTP was submitted. `HARDENING_ACCEPTANCE.json` records the measurements without business data or credentials.

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 // Inactive template. Existing credential/model references must be verified before deployment.
-const source=(await fs.readFile('n8n/sbo-agent.mjs','utf8')+'\n'+await fs.readFile('n8n/sbo-specialists.mjs','utf8')+'\n'+await fs.readFile('n8n/sbo-gateway.mjs','utf8')).replace(/^export /gm,'');
+const source=(await fs.readFile('n8n/sbo-agent.mjs','utf8')+'\n'+await fs.readFile('n8n/sbo-specialists.mjs','utf8')+'\n'+await fs.readFile('n8n/sbo-gateway.mjs','utf8')).replace(/\r\n/g,'\n').replace(/^export /gm,'');
 const table='SBO_WORKSPACE_TABLE_ID',nodes=[],connections={};
 const add=(name,type,parameters,x,y=300,extras={})=>nodes.push({id:name.toLowerCase().replaceAll(' ','-'),name,type:type.includes('.')?type:`n8n-nodes-base.${type}`,typeVersion:type==='code'?2:1,position:[x,y],parameters,...extras});
 const link=(from,to,output=0,type='main')=>{connections[from]||={};connections[from][type]||=[];connections[from][type][output]||=[];connections[from][type][output].push({node:to,type,index:0});};
