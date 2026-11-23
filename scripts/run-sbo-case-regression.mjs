@@ -7,13 +7,13 @@ const code=logic+'\nconst config='+JSON.stringify(config)+';const prefix='+JSON.
 const state=$getWorkflowStaticData('global');if(state.complete)return [];
 const original=JSON.parse($input.first().json.payload);let w=original,c=w.cases.find(c=>c.id===config.caseId);
 if(!c||c.version!==(state.expectedVersion??config.expectedVersion))throw new Error('CASE_CHANGED_STOP_REGRESSION');
-const phase=state.phase||0,keys=['mapping','trends','upskilling'];
+const phase=state.phase??config.resumePhase??0,keys=['mapping','trends','upskilling'];
 const apply=(command,payload,suffix)=>{const out=applyCommand(w,{contractVersion:'sbo.case.v1',command,payload,idempotencyKey:prefix+'-'+suffix,expectedVersion:w.revision},undefined,{technical:true});if(!out.response.ok)throw new Error(out.response.error.code);w=JSON.parse(out.payload);c=w.cases.find(c=>c.id===config.caseId);};
 if(phase===0){
  apply('sbo.contribution.submit',{caseId:c.id,actor:'Business SME statement supplied by Florian Liepe',target:'Organisational baseline',text:config.quote+' Ist-Proficiency und Vergleichbarkeit zur künftigen Nachfrage sind noch zu validieren.'},'sme-note');
  apply('sbo.profile.draft.start',{caseId:c.id},'mapping');
 }else{
- const run=w.runs.find(r=>r.id===prefix+'-'+keys[phase-1]);if(!run||['queued','running'].includes(run.status))return [];
+ const run=w.runs.find(r=>r.id===prefix+'-'+keys[phase-1]);if(!run&&phase===2){apply('sbo.trend.scan.start',{caseId:c.id},'trends');return [{json:{previousRevision:original.revision,revision:w.revision,payload:JSON.stringify(w),phase,expectedVersion:c.version,complete:false}}];}if(!run||['queued','running'].includes(run.status))return [];
  if(run.status!=='succeeded')throw new Error('REGRESSION_AGENT_FAILED_'+(run.diagnostics?.errorCode||run.quality));
  apply('sbo.run.adopt',{runId:run.id},'adopt-'+phase);
  if(phase===1){apply('sbo.case.save',{case:{...c,researchParameters:{businessField:c.unit,region:'Global',focus:'AI-assisted consulting: business use case evaluation, solution design, output verification and responsible AI',process:'Client question to validated recommendation',technology:'Generative AI',horizon:'1 year',sourceIds:['nist-ai','oecd-ai','cedefop','dekra-digital','wef-jobs']}}},'scope');apply('sbo.trend.scan.start',{caseId:c.id},'trends');}
