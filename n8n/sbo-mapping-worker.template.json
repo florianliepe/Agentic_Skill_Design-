@@ -684,6 +684,49 @@
         "options": {}
       },
       "alwaysOutputData": true
+    },
+    {
+      "id": "queued-work-remains",
+      "name": "Queued work remains",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const row=$input.first().json;if(!row.payload)return [];const w=JSON.parse(row.payload);return w.runs.some(r=>r.status===\"queued\")?[{json:{dispatch:true}}]:[];"
+      }
+    },
+    {
+      "id": "dispatch-next-queued-work",
+      "name": "Dispatch next queued work",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3600,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "SBO_WORKER_ID",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -913,6 +956,11 @@
             "node": "Completion needs retry 2",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Queued work remains",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -957,6 +1005,11 @@
             "node": "Completion needs retry 3",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Queued work remains",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -999,6 +1052,22 @@
         [
           {
             "node": "Check completed result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Queued work remains",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queued work remains": {
+      "main": [
+        [
+          {
+            "node": "Dispatch next queued work",
             "type": "main",
             "index": 0
           }

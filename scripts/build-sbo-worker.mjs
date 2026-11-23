@@ -41,5 +41,8 @@ for(let i=2;i<=3;i++){
  link(last,check);link(check,readName);link(readName,prepare);link(prepare,commit);last=commit;
 }
 link(last,'Check completed result');
+add('Queued work remains','code',{jsCode:'const row=$input.first().json;if(!row.payload)return [];const w=JSON.parse(row.payload);return w.runs.some(r=>r.status==="queued")?[{json:{dispatch:true}}]:[];'},3400);
+add('Dispatch next queued work','executeWorkflow',{source:'database',workflowId:{__rl:true,value:'SBO_WORKER_ID',mode:'id'},workflowInputs:{mappingMode:'defineBelow',value:{},matchingColumns:[],schema:[],attemptToConvertTypes:false,convertFieldsToString:false},options:{waitForSubWorkflow:false}},3600,300,{typeVersion:1.2,onError:'continueRegularOutput'});
+for(const name of ['Commit completed result','Commit completed result 2','Commit completed result 3'])link(name,'Queued work remains');link('Queued work remains','Dispatch next queued work');
 await fs.writeFile('n8n/sbo-mapping-worker.template.json',JSON.stringify({name:'Skill Design Studio | mapping worker v1',nodes,connections,settings:{executionOrder:'v1',callerPolicy:'workflowsFromSameOwner',saveDataErrorExecution:'none',saveDataSuccessExecution:'none',saveManualExecutions:false,executionTimeout:210}},null,2)+'\n');
 console.log('Generated routed worker: two 45s gateway attempts maximum; no auth/validation retry; three completion CAS attempts.');
