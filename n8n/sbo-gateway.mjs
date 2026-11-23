@@ -1,10 +1,10 @@
 // All routes remain on the existing authorised Eraneos gateway.
 export function routeFor(operation){
  const routes={
-  'sbo.profile.draft.start':{primary:'gpt-6-luna',fallback:'claude-haiku-4-5',maxTokens:6000},
+  'sbo.profile.draft.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:6000},
   'sbo.trend.scan.start':{primary:'claude-sonnet-5',fallback:'gpt-6-luna',maxTokens:6000},
-  'sbo.upskill.propose.start':{primary:'claude-haiku-4-5',fallback:'gpt-6-luna',maxTokens:5000},
-  'sbo.support.ask.start':{primary:'claude-haiku-4-5',fallback:'gpt-6-luna',maxTokens:1800}
+  'sbo.upskill.propose.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:5000},
+  'sbo.support.ask.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:1800}
  };
  if(!routes[operation])throw new Error('UNSUPPORTED_AGENT_OPERATION');
  return {...routes[operation],timeoutMs:45000,maxAttempts:2};
@@ -26,6 +26,7 @@ export function gatewayValidation(output,prepared,validateMapping,validateSpecia
  const validated=failure?{valid:false,errors:[failure.code]}:prepared.operation==='sbo.profile.draft.start'?validateMapping(body.choices[0].message.content,prepared):validateSpecialist(body.choices[0].message.content,prepared);
  if(prepared.sourcesUnavailable)return {valid:false,errors:['SOURCE_UNAVAILABLE']};
  if(validated.valid&&prepared.sources&&prepared.requestedSourceCount>prepared.sources.length){validated.quality='partial_sources';validated.result.residuals.push('Some selected sources could not be retrieved; review the reduced source coverage.');}
+ if(validated.valid&&prepared.sources?.some(s=>s.sourceMode==='cached'))validated.result.residuals.push('Some evidence uses previously retrieved source text after live retrieval failed. Check the recorded retrieval dates before business adoption.');
  // No raw provider errors, headers, prompts or credentials enter telemetry.
  validated.diagnostics={model:prepared.usedModel,attempts:prepared.attempts||1,route:prepared.route.primary,latencyMs:Math.max(0,Date.now()-prepared.gatewayStartedAt),errorCode:failure?.code||(!validated.valid?'MODEL_VALIDATION':undefined),retryable:failure?.retryable||false};
  return validated;
