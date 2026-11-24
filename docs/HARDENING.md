@@ -93,3 +93,13 @@ The reported intermittent HTTP 503 was not reproducible during deployment (healt
 Validation: 49 tests pass; lint, typecheck, workflow generation and production build pass. The live endpoint rejects invalid admin sessions (401) and legacy passwordless verification (410). Actual Owner password setup and the resulting personally authenticated cockpit remain a user-completed acceptance step.
 
 References: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [OWASP Forgot Password](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
+
+## Login incident — 24 November 2026 afternoon
+
+The browser's CORS preflight error was reproduced as an upstream Azure HTTP 503, including on GET /healthz, GET /healthz/readiness, POST auth, OPTIONS auth and the n8n management API. The Azure HTML error response lacks Access-Control-Allow-Origin; the browser therefore hides its status from application JavaScript and reports a network/CORS failure. This evidence establishes a backend availability failure, not a rejected password. It does not establish whether the container stopped, crashed, exhausted resources or lost a dependency.
+
+The authenticated Azure CLI enumerates two subscriptions, neither exposing eraneos-agentic-platform. No infrastructure restart or settings change was attempted without the actual resource. Recovery requires its resource ID/subscription/resource group and appropriate operator access, or intervention by its existing operator. Inspect App Service/container startup logs, restarts, CPU/memory and dependency health before selecting remediation. The isolated n8n workflow API cannot be used while its host returns 503.
+
+Frontend mitigation: connection errors during authentication now say no sign-in result was received, rather than suggesting a saved draft; a public backend health link is shown; retry actions pause 15 seconds following a transient error. Password verification, origin allowlists, roles and stored identity data are unchanged. This mitigation does not restore the backend.
+
+Recheck with node scripts/check-sbo-availability.mjs. It uses no credentials, records only status/CORS/timing metadata in ignored .local/availability-report.json, tests the preflight and invalid-session boundary, and fails until health, CORS and HTTP401 are correct. After infrastructure recovery, verify a real browser login with the user's existing password; do not reset the Owner password as an outage workaround.
