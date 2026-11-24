@@ -5,9 +5,12 @@ export function clearWorkspaceCache(){workspaceCache=null;}
 export const apiUrl=process.env.NEXT_PUBLIC_SBO_API_URL || 'https://eraneos-agentic-platform.azurewebsites.net/webhook/agentic-skill-design-v1';
 export class WorkspaceError extends Error {constructor(message:string,public code:string,public status:number){super(message);this.name='WorkspaceError';}}
 export const personalApiUrl=process.env.NEXT_PUBLIC_SBO_PERSONAL_API_URL||'https://eraneos-agentic-platform.azurewebsites.net/webhook/agentic-skill-design-auth-v1';
-type PersonalResponse=Response&{challengeId?:string;message?:string;session?:{token:string;expiresAt:number;user:{email:string;roles:string[]}}};
+export type PlatformRole='Owner'|'Developer'|'User';
+export type AdminSnapshot={canEdit:boolean;platformRole:PlatformRole;email:string;revision:number;members:{email:string;platformRole:PlatformRole;active:boolean;passwordConfigured:boolean;activeSessions:number}[];audit:{at:string;actor:string;action:string;target:string}[]};
+export type PersonalSession={token:string;expiresAt:number;user:{email:string;roles:string[];platformRole:PlatformRole}};
+type PersonalResponse=Response&{challengeId?:string;message?:string;admin?:AdminSnapshot;session?:PersonalSession};
 export async function personalAccess(body:Record<string,unknown>):Promise<PersonalResponse>{
- let response:globalThis.Response;try{response=await fetch(personalApiUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(20000)});}catch{throw new WorkspaceError('The workspace connection was interrupted. Your draft is preserved. Retry when the service is available.','CONNECTION_UNAVAILABLE',0);}
+ let response:globalThis.Response;try{response=await fetch(personalApiUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(['login','set_password'].includes(String(body.action))?60000:20000)});}catch{throw new WorkspaceError('The workspace connection was interrupted. Your draft is preserved. Retry when the service is available.','CONNECTION_UNAVAILABLE',0);}
  let result:PersonalResponse;try{result=await response.json();}catch{throw new WorkspaceError('Personal sign-in is unavailable. Please retry later.','AUTH_UNAVAILABLE',response.status);}
  if(!response.ok||!result.ok)throw new WorkspaceError(result.error?.message||'Unable to process personal access.',result.error?.code||'AUTH_ERROR',response.status);return result;
 }
