@@ -1,14 +1,14 @@
 // Agent boundary: retrieval is local; the model may select canonical concepts, never redefine them.
-export const agentVersion='sbo.mapping.v1';
+export const agentVersion='sbo.design.v2';
 export function claimNextRun(workspace,now=new Date().toISOString()){
   const w=JSON.parse(JSON.stringify(workspace));
   const expired=w.runs.find(r=>r.status==='running'&&r.leaseUntil&&r.leaseUntil<now);
   if(expired){expired.status='timed_out';expired.quality='incomplete';expired.stage='Worker lease expired';expired.error='The analysis did not complete within its lease. Start a new run to retry.';expired.updatedAt=now;w.revision++;return {write:true,previousRevision:workspace.revision,revision:w.revision,payload:JSON.stringify(w),runId:null};}
   const isSupport=r=>r.operation==='sbo.support.ask.start';
   const supportBusy=w.runs.some(r=>r.status==='running'&&isSupport(r)),analysisBusy=w.runs.some(r=>r.status==='running'&&!isSupport(r));
-  const run=(!supportBusy?w.runs.find(r=>r.status==='queued'&&isSupport(r)):null)||(!analysisBusy?w.runs.find(r=>r.status==='queued'&&['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start'].includes(r.operation)):null);
+  const run=(!supportBusy?w.runs.find(r=>r.status==='queued'&&isSupport(r)):null)||(!analysisBusy?w.runs.find(r=>r.status==='queued'&&['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start','sbo.import.mapping.start'].includes(r.operation)):null);
   if(!run)return {write:false};
-  run.status='running';run.stage=run.operation==='sbo.trend.scan.start'?'Researching selected sources':run.operation==='sbo.upskill.propose.start'?'Preparing development formats':run.operation==='sbo.support.ask.start'?'Preparing contextual support':'Drafting against canonical concepts';run.updatedAt=now;run.leaseUntil=new Date(Date.parse(now)+(run.operation==='sbo.trend.scan.start'?420000:240000)).toISOString();run.agentVersion=agentVersion;run.sourceRole={id:run.inputCase.roleId,title:w.roles.find(r=>r.id===run.inputCase.roleId)?.title};run.inputSources=JSON.parse(JSON.stringify(w.sourceManifest));w.revision++;
+  run.status='running';run.stage=run.operation==='sbo.trend.scan.start'?'Researching selected sources':run.operation==='sbo.upskill.propose.start'?'Preparing development formats':run.operation==='sbo.support.ask.start'?'Preparing contextual support':run.operation==='sbo.import.mapping.start'?'Mapping source columns':'Drafting against canonical concepts';run.updatedAt=now;run.leaseUntil=new Date(Date.parse(now)+(run.operation==='sbo.trend.scan.start'?600000:240000)).toISOString();run.agentVersion=agentVersion;run.sourceRole={id:run.inputCase.roleId,title:w.roles.find(r=>r.id===run.inputCase.roleId)?.title};run.inputSources=JSON.parse(JSON.stringify(w.sourceManifest));w.revision++;
   return {write:true,previousRevision:workspace.revision,revision:w.revision,payload:JSON.stringify(w),runId:run.id};
 }
 export function prepareMapping(workspace,run){
@@ -44,7 +44,7 @@ export function completeRun(workspace,runId,validated,now=new Date().toISOString
   const w=JSON.parse(JSON.stringify(workspace)),run=w.runs.find(r=>r.id===runId);
   if(!run||run.status!=='running')return {write:false,reason:'RUN_NO_LONGER_ACTIVE'};
   if(validated.diagnostics)run.diagnostics=validated.diagnostics;
-  run.status=validated.valid?'succeeded':'failed';run.quality=validated.valid?validated.quality:validated.errors?.some(e=>e.startsWith('GATEWAY_'))?'incomplete':'invalid_output';run.stage=validated.valid?'Ready for SME review':validated.errors?.includes('GATEWAY_ERROR')?'Gateway request failed':'Output validation failed';run.updatedAt=now;
+  run.status=validated.valid?(validated.quality==='incomplete_evidence'?'incomplete':'succeeded'):'failed';run.quality=validated.valid?validated.quality:validated.errors?.some(e=>e.startsWith('GATEWAY_'))?'incomplete':'invalid_output';run.stage=validated.valid?(validated.quality==='incomplete_evidence'?'Research incomplete · more evidence required':'Ready for SME review'):validated.errors?.includes('GATEWAY_ERROR')?'Gateway request failed':'Output validation failed';run.updatedAt=now;
   if(validated.valid)run.result=validated.result;else run.error=validated.errors?.includes('GATEWAY_ERROR')?'The model service is unavailable or rejected the request. Inspect the error code and retry after recovery.':'No result was applied. Error: '+(validated.errors?.join(', ')||'MODEL_VALIDATION')+'. Review the inputs or retry with the current case.';
   w.revision++;
   return {write:true,previousRevision:workspace.revision,revision:w.revision,payload:JSON.stringify(w)};

@@ -1,7 +1,8 @@
+import {compileWorkflowCode} from './compile-workflow-code.mjs';
 import fs from 'node:fs/promises';import {api} from './n8n-client.mjs';
 const config=JSON.parse(await fs.readFile(process.argv[2]||'.local/case-regression-config.json','utf8'));
 const deployment=JSON.parse(await fs.readFile('.local/deployment.json','utf8'));
-const logic=(await fs.readFile('n8n/sbo-logic.mjs','utf8')).replace(/^export /gm,'');
+const logic=await compileWorkflowCode('n8n/sbo-logic.mjs');
 const prefix='CASE-REGRESSION-'+Date.now();
 const code=logic+'\nconst config='+JSON.stringify(config)+';const prefix='+JSON.stringify(prefix)+`;
 const state=$getWorkflowStaticData('global');if(state.complete)return [];

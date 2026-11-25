@@ -12,7 +12,7 @@ async function deploy(key,workflow){
 const instantiate=async(file,replacements)=>bindWorkflow(await fs.readFile(file,'utf8'),replacements);
 // Change only the Skill Studio API and its worker; preserve all current source and case data.
 const workspace=await instantiate('n8n/sbo-workspace-api.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_TEAM_HEADER_CREDENTIAL_ID:config.existingTeamCredentialId});await deploy('workflowId',workspace);
-const worker=await instantiate('n8n/sbo-mapping-worker.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_GATEWAY_CREDENTIAL_ID:config.gatewayCredentialId,VERIFIED_GATEWAY_MODEL:'claude-sonnet-5',SBO_WORKER_ID:config.workerId,SBO_SOURCE_CACHE_TABLE_ID:config.sourceCacheTableId});worker.settings.executionTimeout=210;await deploy('workerId',worker);
+const worker=await instantiate('n8n/sbo-mapping-worker.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_GATEWAY_CREDENTIAL_ID:config.gatewayCredentialId,VERIFIED_GATEWAY_MODEL:'claude-sonnet-5',SBO_WORKER_ID:config.workerId,SBO_SOURCE_CACHE_TABLE_ID:config.sourceCacheTableId});worker.settings.executionTimeout=360;await deploy('workerId',worker);
 if(!config.authTableId){const table=await api('/data-tables','POST',{name:'Skill Design Studio personal access v1',columns:[{name:'workspace',type:'string'},{name:'revision',type:'number'},{name:'payload',type:'string'}]});config.authTableId=table.id;await save();}
 const authTable=await api('/data-tables/'+config.authTableId);if(authTable.name!=='Skill Design Studio personal access v1')throw new Error('Unexpected authentication table');
 const authRows=await api('/data-tables/'+config.authTableId+'/rows?limit=2');
@@ -34,9 +34,9 @@ const auth=await instantiate('n8n/sbo-personal-access.template.json',{SBO_WORKSP
 let enabled=false;for(let attempt=0;attempt<3&&!enabled;attempt++){
  const rows=await api('/data-tables/'+config.tableId+'/rows?limit=2');if(rows.data.length!==1)throw new Error('Unexpected workspace rows');const row=rows.data[0],w=JSON.parse(row.payload);
  if(attempt===0)await fs.writeFile(backupDir+'/workspace-before.json',JSON.stringify(w));
- w.runtimeCapabilities={...w.runtimeCapabilities,profileDraft:true,trendResearch:true,upskilling:true,support:true};w.revision++;
+ w.runtimeCapabilities={...w.runtimeCapabilities,profileDraft:true,trendResearch:true,upskilling:true,support:true,importMapping:true};w.revision++;
  const receipt=await api('/data-tables/'+config.tableId+'/rows/update','PATCH',{filter:{type:'and',filters:[{columnName:'workspace',condition:'eq',value:'main'},{columnName:'revision',condition:'eq',value:row.revision}]},data:{revision:w.revision,payload:JSON.stringify(w)}});
- const latest=await api('/data-tables/'+config.tableId+'/rows?limit=1');enabled=JSON.parse(latest.data[0].payload).runtimeCapabilities.support===true;void receipt;
+ const latest=await api('/data-tables/'+config.tableId+'/rows?limit=1');enabled=JSON.parse(latest.data[0].payload).runtimeCapabilities.support===true&&JSON.parse(latest.data[0].payload).runtimeCapabilities.importMapping===true;void receipt;
 }
 if(!enabled)throw new Error('Capabilities update conflicted; reconcile before enabling the frontend');
 console.log(JSON.stringify({workspace:config.workflowId,worker:config.workerId,personalAccess:config.personalAccessId,mailDelivery:config.mailWorkflowId,capabilities:['profile','trends','upskilling','support'],publication:'not performed'}));
