@@ -16,6 +16,7 @@ import {CatalogueWorkbench} from './catalogue-workbench';
 import {TrendWorkbench} from './trend-workbench';
 import {RunReview} from './run-review';
 import {SupportAssistant,HelpTip,helpBySection} from './support-assistant';
+import {createSessionRecovery} from '@/lib/session-recovery.mjs';
 import {mergeCaseDraft} from '@/lib/sbo-merge.mjs';
 
 const sections = ['Overview','Role profiles','Emerging skills','Team capabilities','Catalogue','Review','Admin cockpit'] as const;
@@ -68,7 +69,20 @@ export default function SkillStudio() {
   const patch=(value:Partial<Case>)=>{if(current)edit({...current,...value});};
   const adoptWorkspace=(w:Workspace)=>{setWorkspace(w);setDraft(null);setDirty(false);draftBase.current=undefined;setCaseId(id=>w.cases.some(c=>c.id===id)?id:w.cases[0]?.id||'');};
   async function connectPersonal(token:string,email:string,role:PlatformRole){const access='session:'+token;setPassword(access);const r=await command(access,'sbo.workspace.read');if(!r.workspace)throw new Error('Workspace is not available.');adoptWorkspace(r.workspace);setPersonalEmail(email);setPlatformRole(role);setSessionRecovery(false);setError('');setNotice('Signed in with personal workspace access.');}
-  useEffect(()=>{let cancelled=false;const restore=async()=>{const session=readPersonalSession();if(!session)return;setRestoring(true);try{const access='session:'+session.token;const r=await command(access,'sbo.workspace.read');if(!cancelled&&r.workspace){setPassword(access);setPersonalEmail(session.user.email);setPlatformRole(session.user.platformRole||'User');setWorkspace(r.workspace);setCaseId(r.workspace.cases[0]?.id||'');setSessionRecovery(false);setError('');}}catch(e){if(e instanceof WorkspaceError&&[401,403].includes(e.status)){clearPersonalSession();if(!cancelled){setSessionRecovery(false);setError('');}}else if(!cancelled){setSessionRecovery(true);setError('The workspace service is unavailable. Your saved sign-in is retained. Retry later.');}}finally{if(!cancelled)setRestoring(false);}};void restore();return()=>{cancelled=true;};},[sessionRetry]);
+  const hasWorkspace=Boolean(workspace);
+  useEffect(()=>{
+    if(hasWorkspace||!readPersonalSession())return;
+    let cancelled=false;const recovery=createSessionRecovery();
+    const restore=async()=>{if(!recovery.begin(!document.hidden))return;const session=readPersonalSession();if(!session){recovery.stop();return;}setRestoring(true);let retry=false;
+      try{const access='session:'+session.token;const r=await command(access,'sbo.workspace.read');if(!r.workspace)throw new Error('Workspace response unavailable.');if(!cancelled){setPassword(access);setPersonalEmail(session.user.email);setPlatformRole(session.user.platformRole||'User');setWorkspace(r.workspace);setCaseId(r.workspace.cases[0]?.id||'');setSessionRecovery(false);setError('');}}
+      catch(e){if(e instanceof WorkspaceError&&[401,403].includes(e.status)){clearPersonalSession();if(!cancelled){setSessionRecovery(false);setError('');}}else {retry=true;if(!cancelled){setSessionRecovery(true);setError('The workspace service could not be reached. Your saved sign-in is retained. We will retry briefly while this tab is visible, and when you return to it.');}}}
+      finally{recovery.complete(retry);if(!cancelled)setRestoring(false);}
+    };
+    const resume=()=>{recovery.resume();void restore();};
+    void restore();const timer=setInterval(()=>{void restore();},15000);
+    window.addEventListener('online',resume);window.addEventListener('focus',resume);document.addEventListener('visibilitychange',resume);
+    return()=>{cancelled=true;recovery.stop();clearInterval(timer);window.removeEventListener('online',resume);window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);};
+  },[sessionRetry,hasWorkspace]);
   async function leave(){if(dirty&&!window.confirm('Discard unsaved changes and leave?'))return;if(password.startsWith('session:')){try{await personalAccess({action:'logout',token:password.slice(8)});}catch{setNotice('Local sign-out completed; the server session will expire automatically.');}}clearPersonalSession();clearWorkspaceCache();setPlatformRole('User');setSection('Overview');setSessionRecovery(false);setStatusConnection('');setWorkspace(null);setPassword('');setPersonalEmail('');setDraft(null);setDirty(false);setError('');}
   async function send(operation:string,payload:Record<string,unknown>,success:string){
     if(!workspace)return;setBusy(true);setError('');

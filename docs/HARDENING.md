@@ -103,3 +103,13 @@ The authenticated Azure CLI enumerates two subscriptions, neither exposing erane
 Frontend mitigation: connection errors during authentication now say no sign-in result was received, rather than suggesting a saved draft; a public backend health link is shown; retry actions pause 15 seconds following a transient error. Password verification, origin allowlists, roles and stored identity data are unchanged. This mitigation does not restore the backend.
 
 Recheck with node scripts/check-sbo-availability.mjs. It uses no credentials, records only status/CORS/timing metadata in ignored .local/availability-report.json, tests the preflight and invalid-session boundary, and fails until health, CORS and HTTP401 are correct. After infrastructure recovery, verify a real browser login with the user's existing password; do not reset the Owner password as an outage workaround.
+
+## Recovery recheck — 25 November 2026
+
+Public n8n health/readiness recovered (200); preflight returns 204 with the exact GitHub origin; invalid sessions return 401. Both routed models returned 200 directly and through a protected temporary n8n workflow using the deployed gateway credential. The temporary workflow was deactivated. No queued or running analysis was stuck; the AI Consultant case remains v9.
+
+The real retained Owner session still returned 503 after infrastructure recovery. Inspection found unresolved SBO_WORKSPACE_TABLE_ID references in the personal-access workflow's inline Read workspace and Commit unchanged revision nodes. The personal-access deployment supplied the auth table, mail and worker references but omitted the inline workspace table. The two bindings were corrected in the live owned workflow, preserving identity and workspace data. The real Chrome session then restored successfully and loaded AI Consultant as Owner.
+
+Deployment now binds the inline workspace table explicitly and rejects all recognized unresolved table/workflow/credential placeholders before upload. Regression tests require both read and write references and the independent auth table. Retained-session recovery now retries only reads, pauses in hidden tabs, prevents overlap, backs off over five attempts, and re-arms on a later focus/online event after its cooldown. Success or an invalid/expired session stops automatic recovery. Opening the example or leaving the app cancels the loop. No password is automatically resubmitted.
+
+Validation: 53 tests, lint, typecheck and production build pass. A real retained session, rather than only an invalid-token health probe, is required for future login acceptance. The earlier infrastructure outage and this deployment defect were distinct failures; the Azure outage cause remains unestablished.

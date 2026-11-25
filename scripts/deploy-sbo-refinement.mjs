@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import {api} from './n8n-client.mjs';
+import {bindWorkflow} from './workflow-bindings.mjs';
 import {migrateIdentityVault} from '../n8n/sbo-auth.mjs';
 const path='.local/deployment.json',config=JSON.parse(await fs.readFile(path,'utf8'));
 const backupDir='.local/refinement-backup';await fs.mkdir(backupDir,{recursive:true});
@@ -8,7 +9,7 @@ async function deploy(key,workflow){
  let id=config[key];if(id){const before=await api('/workflows/'+id);if(before.name!==workflow.name)throw new Error('Refusing unrelated workflow update: '+key);await fs.writeFile(`${backupDir}/${key}.json`,JSON.stringify(before,null,2));await api('/workflows/'+id,'PUT',workflow);}else{const created=await api('/workflows','POST',workflow);id=created.id;config[key]=id;await save();}
  if(key==='workflowId'&&config.legacyRetired)await api('/workflows/'+id+'/deactivate','POST',{});else await api('/workflows/'+id+'/activate','POST',{});return id;
 }
-const instantiate=async(file,replacements)=>{let text=await fs.readFile(file,'utf8');for(const [a,b] of Object.entries(replacements))text=text.replaceAll(a,b);return JSON.parse(text);};
+const instantiate=async(file,replacements)=>bindWorkflow(await fs.readFile(file,'utf8'),replacements);
 // Change only the Skill Studio API and its worker; preserve all current source and case data.
 const workspace=await instantiate('n8n/sbo-workspace-api.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_TEAM_HEADER_CREDENTIAL_ID:config.existingTeamCredentialId});await deploy('workflowId',workspace);
 const worker=await instantiate('n8n/sbo-mapping-worker.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_GATEWAY_CREDENTIAL_ID:config.gatewayCredentialId,VERIFIED_GATEWAY_MODEL:'claude-sonnet-5',SBO_WORKER_ID:config.workerId,SBO_SOURCE_CACHE_TABLE_ID:config.sourceCacheTableId});worker.settings.executionTimeout=210;await deploy('workerId',worker);
@@ -28,7 +29,7 @@ const mail={name:'Skill Design Studio | login code delivery v1',nodes:[
 ],connections:{'Trusted login request':{main:[[{node:'Validate Studio mail',type:'main',index:0}]]},'Validate Studio mail':{main:[[{node:'Send Studio code',type:'main',index:0}]]},'Send Studio code':{main:[[{node:'Mail accepted',type:'main',index:0}]]}},settings:{executionOrder:'v1',callerPolicy:'workflowsFromSameOwner',saveDataErrorExecution:'none',saveDataSuccessExecution:'none',saveManualExecutions:false,executionTimeout:30}};
 await deploy('mailWorkflowId',mail);
 const internal=await instantiate('n8n/sbo-personal-workspace.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId});await deploy('personalWorkspaceId',internal);
-const auth=await instantiate('n8n/sbo-personal-access.template.json',{SBO_AUTH_TABLE_ID:config.authTableId,SBO_INTERNAL_API_ID:config.personalWorkspaceId,SBO_MAIL_WORKFLOW_ID:config.mailWorkflowId,SBO_WORKER_ID:config.workerId});await deploy('personalAccessId',auth);
+const auth=await instantiate('n8n/sbo-personal-access.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,SBO_AUTH_TABLE_ID:config.authTableId,SBO_INTERNAL_API_ID:config.personalWorkspaceId,SBO_MAIL_WORKFLOW_ID:config.mailWorkflowId,SBO_WORKER_ID:config.workerId});await deploy('personalAccessId',auth);
 // Capabilities are enabled only after the corresponding worker and routes are deployed.
 let enabled=false;for(let attempt=0;attempt<3&&!enabled;attempt++){
  const rows=await api('/data-tables/'+config.tableId+'/rows?limit=2');if(rows.data.length!==1)throw new Error('Unexpected workspace rows');const row=rows.data[0],w=JSON.parse(row.payload);
