@@ -12,7 +12,7 @@ async function deploy(key,workflow){
 const instantiate=async(file,replacements)=>bindWorkflow(await fs.readFile(file,'utf8'),replacements);
 // Change only the Skill Studio API and its worker; preserve all current source and case data.
 const workspace=await instantiate('n8n/sbo-workspace-api.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_TEAM_HEADER_CREDENTIAL_ID:config.existingTeamCredentialId});await deploy('workflowId',workspace);
-const worker=await instantiate('n8n/sbo-mapping-worker.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_GATEWAY_CREDENTIAL_ID:config.gatewayCredentialId,VERIFIED_GATEWAY_MODEL:'claude-sonnet-5',SBO_WORKER_ID:config.workerId,SBO_SOURCE_CACHE_TABLE_ID:config.sourceCacheTableId});worker.settings.executionTimeout=300;await deploy('workerId',worker);
+const worker=await instantiate('n8n/sbo-mapping-worker.template.json',{SBO_WORKSPACE_TABLE_ID:config.tableId,EXISTING_GATEWAY_CREDENTIAL_ID:config.gatewayCredentialId,VERIFIED_GATEWAY_MODEL:'claude-sonnet-5',SBO_WORKER_ID:config.workerId,SBO_SOURCE_CACHE_TABLE_ID:config.sourceCacheTableId});worker.settings.executionTimeout=360;await deploy('workerId',worker);
 if(!config.authTableId){const table=await api('/data-tables','POST',{name:'Skill Design Studio personal access v1',columns:[{name:'workspace',type:'string'},{name:'revision',type:'number'},{name:'payload',type:'string'}]});config.authTableId=table.id;await save();}
 const authTable=await api('/data-tables/'+config.authTableId);if(authTable.name!=='Skill Design Studio personal access v1')throw new Error('Unexpected authentication table');
 const authRows=await api('/data-tables/'+config.authTableId+'/rows?limit=2');
