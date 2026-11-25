@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
+import {compileWorkflowCode} from './compile-workflow-code.mjs';
 // Portable template only. No credentials, network calls or production mutations.
-const logic=(await fs.readFile('n8n/sbo-logic.mjs','utf8')).replace(/\r\n/g,'\n').replace('export function','function');
+const logic=await compileWorkflowCode('n8n/sbo-logic.mjs');
 const table='SBO_WORKSPACE_TABLE_ID',credential='EXISTING_TEAM_HEADER_CREDENTIAL_ID';
 const nodes=[];const add=(name,type,parameters,x,extra={})=>nodes.push({id:name.toLowerCase().replaceAll(' ','-'),name,type:`n8n-nodes-base.${type}`,typeVersion:type==='code'?2:1,position:[x,300],parameters,...extra});
 add('Team API','webhook',{httpMethod:'POST',path:'agentic-skill-design-v1',authentication:'headerAuth',responseMode:'responseNode',options:{allowedOrigins:'https://florianliepe.github.io,http://localhost:3000,http://127.0.0.1:3000'}},0,{typeVersion:2,webhookId:'agentic-skill-design-v1',credentials:{httpHeaderAuth:{id:credential,name:'Existing pilot team access'}}});

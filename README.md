@@ -4,7 +4,11 @@ A focused Eraneos-style workbench for role profiles, emerging skills and qualita
 
 ## Feedback refinement release
 
-Personal email-code access, four connected specialist functions, parameter-driven trend research, upskilling formats, contextual support, searchable role selection, profile/JRD comparison and readable result review are described in [Feedback refinement](docs/FEEDBACK_REFINEMENT.md). The new public login uses its own n8n sign-in workflow and server-verified workspace membership. No internal source content is bundled.
+Personal password access with email-code setup/reset, five connected specialist functions, parameter-driven trend research, upskilling formats, contextual support, searchable role selection, profile/JRD comparison and readable result review are described in [Feedback refinement](docs/FEEDBACK_REFINEMENT.md). The new public login uses its own n8n sign-in workflow and server-verified workspace membership. No internal source content is bundled.
+
+## Search, bulk import and scoped skill intelligence
+
+Searchable cases, reversible archives, validated CSV/XLSX import with agent-assisted mapping, a five-skill research evidence gate and role/business-area heatmaps are specified in [Import and radar design](docs/IMPORT_RADAR_DESIGN.md).
 
 ## Initial release status
 
