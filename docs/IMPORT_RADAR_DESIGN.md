@@ -38,7 +38,7 @@ Trend research has at most primary + transient fallback + one evidence expansion
 
 The portfolio heatmap indexes requirements and scoped findings once per immutable workspace revision, pages 35 skills and shows up to eight comparison columns. Catalogue payloads remain cached across compact status responses; only import commit forces catalogue refresh. Excel dependencies are dynamically loaded.
 
-If unrelated worker completion changes the workspace revision, imported-role lifecycle actions and import mapping may retry once against the current revision. Case archives retry only when all affected case versions and archive states remain unchanged. Competing edits to the actual target remain explicit conflicts. No permission or source validation is bypassed.
+If unrelated worker completion changes the workspace revision, imported-role lifecycle actions and import mapping may make up to three guarded retries against the current revision. Case archives retry only when all affected case versions and archive states remain unchanged. Competing edits to the actual target remain explicit conflicts. No permission or source validation is bypassed.
 
 ## Frontend intelligence
 
