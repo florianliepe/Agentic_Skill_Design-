@@ -28,6 +28,8 @@ At least five distinct source-backed capabilities are required. Repeated observa
 
 An automated evidence/identity/schema gate does not establish semantic quality. SMEs must validate novelty, relevance, differentiation and task inference. Business/HRBP decisions and CoE release remain separate; research cannot approve a JRD change.
 
+Research prompts now select immutable excerpt IDs from supplied source text instead of retranscribing quotations. The server resolves the original text, checks source membership and retains its hash. Invented or cross-source handles fail validation; older exact quotations remain strictly source-checked. This removes an observed transcription failure without weakening evidence binding.
+
 ## Workflow and performance
 
 One controlled n8n orchestrator routes five specialist functions: role mapping, trend research, upskilling, contextual support and import column mapping. These are prompts on shared model infrastructure, not five always-running autonomous agents. Support has an independent lane. Import mapping uses the existing bounded gateway route; no model key reaches the frontend.
@@ -35,6 +37,8 @@ One controlled n8n orchestrator routes five specialist functions: role mapping, 
 Trend research has at most primary + transient fallback + one evidence expansion call. Trend attempts use a compact response and low reasoning route with a 75-second ceiling; other model attempts retain a 45-second bound, source requests 10 seconds, overall worker 360 seconds, trend lease ten minutes. Permanent authentication failures and invalid outputs do not trigger retry loops. Completion and imports use revision compare-and-swap and idempotency receipts. Raw import samples are removed from public run responses; staged rows are removed from public batch summaries.
 
 The portfolio heatmap indexes requirements and scoped findings once per immutable workspace revision, pages 35 skills and shows up to eight comparison columns. Catalogue payloads remain cached across compact status responses; only import commit forces catalogue refresh. Excel dependencies are dynamically loaded.
+
+If unrelated worker completion changes the workspace revision, imported-role lifecycle actions and import mapping may make up to three guarded retries against the current revision. Case archives retry only when all affected case versions and archive states remain unchanged. Competing edits to the actual target remain explicit conflicts. No permission or source validation is bypassed.
 
 ## Frontend intelligence
 

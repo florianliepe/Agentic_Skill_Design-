@@ -12,6 +12,7 @@ import {SkillIntelligence} from './skill-intelligence';
 import {CaseBrowser} from './case-browser';
 import {ImportWorkbench} from './import-workbench';
 import {splitImportRows} from '@/lib/import-file';
+import {canRebaseCommand} from '@/lib/command-recovery.mjs';
 import {AdminCockpit} from './admin-cockpit';
 import type {PlatformRole} from '@/lib/sbo-client';
 import {SearchPicker} from './search-picker';
@@ -99,9 +100,12 @@ export default function SkillStudio() {
       if(result.workspace)adoptWorkspace(result.workspace);pending.current=null;setNotice(success);if(['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start'].includes(operation))navigate('Review');return true;
      }catch(e){
       if(e instanceof WorkspaceError&&e.code==='VERSION_CONFLICT'&&operation!=='sbo.case.save'){
-        try{const latest=await command(password,'sbo.workspace.status');const target=typeof payload.caseId==='string'?payload.caseId:workspace.runs.find(r=>r.id===payload.runId)?.caseId;const before=workspace.cases.find(c=>c.id===target),after=latest.workspace?.cases.find(c=>c.id===target);
-          if(before&&after&&before.version===after.version&&latest.workspace){const request={operation,payload,revision:latest.workspace.revision,key:uid()};pending.current=request;const retried=await command(password,operation,payload,request.revision,request.key);if(retried.workspace)adoptWorkspace(retried.workspace);pending.current=null;setNotice(success);if(['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start'].includes(operation))navigate('Review');return true;}
-        }catch{setError('Your request is retained. Reconnect and retry before changing its content.');return false;}
+        try{for(let attempt=0;attempt<3;attempt++){const latest=await command(password,'sbo.workspace.status');
+          if(!latest.workspace||!canRebaseCommand(workspace,latest.workspace,operation,payload))break;
+          const request={operation,payload,revision:latest.workspace.revision,key:uid()};pending.current=request;
+          try{const retried=await command(password,operation,payload,request.revision,request.key);if(retried.workspace)adoptWorkspace(retried.workspace);pending.current=null;setNotice(success);if(['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start'].includes(operation))navigate('Review');return true;}
+          catch(retryError){if(!(retryError instanceof WorkspaceError&&retryError.code==='VERSION_CONFLICT')||attempt===2)throw retryError;}
+        }}catch(retryError){setError(retryError instanceof Error?retryError.message:'Your request is retained. Retry before changing its content.');return false;}
       }
       if(e instanceof WorkspaceError&&e.status===409&&operation==='sbo.case.save'){
         try{const latest=await command(password,'sbo.workspace.read');const local=payload.case as Case;
