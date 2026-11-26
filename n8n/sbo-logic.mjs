@@ -1,5 +1,8 @@
 import {importHash} from '../src/lib/bulk-import.mjs';
 import {stageImport,commitImport} from './sbo-import.mjs';
+import {validClassification} from '../src/lib/ai-domain.mjs';
+import {validScenario,evolutionEvidence} from '../src/lib/profile-evolution.mjs';
+import {applyEvolutionDraft} from './sbo-evolution-commands.mjs';
 // Pure command handler. The n8n wrapper atomically CAS-commits the returned payload.
 export function applyCommand(original, request, now = new Date().toISOString(), verifiedContext = null) {
   const error=(code,message,status=422)=>({write:false,status,response:{ok:false,error:{code,message}}});
@@ -8,7 +11,7 @@ export function applyCommand(original, request, now = new Date().toISOString(), 
   const readCommands=['sbo.workspace.read','sbo.workspace.status','sbo.run.status','sbo.run.result','sbo.tna.export'];
   const op=request.command,p=request.payload||{};
   let w=original;
-  const publicRun=r=>{const {inputCase,inputSources,inputImport,...safe}=r;void inputCase;void inputSources;void inputImport;return safe;};
+  const publicRun=r=>{const {inputCase,inputSources,inputImport,inputEvolution,...safe}=r;void inputCase;void inputSources;void inputImport;void inputEvolution;return safe;};
   const publicWorkspace=()=>{const {history,receipts,...safe}=w;void history;void receipts;const data={...safe,runs:w.runs.map(publicRun),audit:w.audit.slice(-100),imports:(w.imports||[]).map(b=>{const {parts,...summary}=b;void parts;return summary;})};if((request.responseMode==="compact"||op==="sbo.workspace.status")&&op!=='sbo.import.commit'){delete data.skills;delete data.roles;}return data;};
   const result=()=>({ok:true,workspace:publicWorkspace(),revision:w.revision});
   if(op==='sbo.workspace.read'||op==='sbo.workspace.status')return {write:false,status:200,response:result()};
@@ -52,7 +55,13 @@ export function applyCommand(original, request, now = new Date().toISOString(), 
   };
   let caseId=p.caseId||p.case?.id||'', version=0;
   if(['sbo.import.stage','sbo.import.commit','sbo.import.discard','sbo.case.archive_many','sbo.case.archive','sbo.case.restore','sbo.role.archive','sbo.role.restore','sbo.import.mapping.start'].includes(op)&&verifiedContext?.platformRole!=='Owner'&&!verifiedContext?.technical)return error('FORBIDDEN','Only the workspace Owner can import or archive records.',403);
-  if(op==='sbo.import.stage'||op==='sbo.import.commit'){
+  if(op==='sbo.skill.classify'){
+    if(verifiedContext?.platformRole!=='Owner'&&!verifiedContext?.technical)return error('FORBIDDEN','Only the Owner can maintain reviewed topic classifications.',403);
+    const skill=w.skills.find(s=>s.id===p.skillId);if(!validClassification(skill,p.classification))return error('VALIDATION_ERROR','Select an AI scope and explain its boundary. Contextual AI and secondary categories need an explicit rationale.');
+    const x=p.classification;w.skillClassifications={...(w.skillClassifications||{}),[skill.id]:{aiScope:x.aiScope,secondaryCategory:x.secondaryCategory||'',applicationContext:x.aiScope==='contextual'?x.applicationContext:'',reason:x.reason,updatedAt:now,updatedBy:verifiedContext?.email||'Technical verification'}};
+  }else if(op==='sbo.profile.evolution.apply'){
+    const applied=applyEvolutionDraft(w,p,now);if(applied.error)return error('EVOLUTION_CONFLICT',applied.error,409);caseId=applied.caseId;version=applied.version;
+  }else if(op==='sbo.import.stage'||op==='sbo.import.commit'){
     const outcome=op==='sbo.import.stage'?stageImport(w,p,now):commitImport(w,p,now);if(outcome.error)return error('IMPORT_VALIDATION',outcome.error);if(outcome.unchanged)return {write:false,status:200,response:result()};
   }else if(op==='sbo.import.discard'){
     const batch=w.imports?.find(b=>b.id===p.batchId);if(!batch||batch.status!=='staging')return error('IMPORT_VALIDATION','Only a staged import can be discarded.');delete batch.parts;batch.status='discarded';
@@ -82,6 +91,7 @@ export function applyCommand(original, request, now = new Date().toISOString(), 
     if(!existing&&incoming.version!==0)return error('VERSION_CONFLICT','New cases start at version zero.',409);
     if(incoming.researchParameters){const rp=incoming.researchParameters;if(!['All horizons','1 year','2 years','3–5 years'].includes(rp.horizon)||rp.expandSources!==undefined&&typeof rp.expandSources!=='boolean')return error('VALIDATION_ERROR','Choose a supported horizon and source expansion mode.');if(rp.roleIds&&(!Array.isArray(rp.roleIds)||rp.roleIds.length>6||rp.roleIds.some(id=>!w.roles.some(r=>r.id===id))))return error('VALIDATION_ERROR','Choose up to six existing target roles.');if(rp.businessAreas&&(!Array.isArray(rp.businessAreas)||rp.businessAreas.length>6||rp.businessAreas.some(x=>typeof x!=='string'||!x.trim()||x.length>200)))return error('VALIDATION_ERROR','Choose up to six business areas.');if(!['businessField','region','focus','process','technology','horizon'].every(k=>typeof rp[k]==='string'&&rp[k].length<12000)||!Array.isArray(rp.sourceIds)||rp.sourceIds.length>8||rp.sourceIds.some(id=>!['nist-ai','oecd-ai','cedefop','dekra-digital','wef-jobs','wef-skills','cedefop-forecast','eu-digcomp'].includes(id)))return error('VALIDATION_ERROR','Invalid research parameters or source selection.');}
     const next=Object.fromEntries(['id','title','unit','question','owner','targetDate','trigger','roleId','relevance','requirements','baselines','signals','measures','researchParameters'].map(key=>[key,incoming[key]]));
+    next.evolution=existing?.evolution;
     Object.assign(next,{version:(existing?.version||0)+1,updatedAt:now,status:'draft',decisions:[],contributions:existing?.contributions||[]});
     next.individualAssessments=existing?.individualAssessments||[];
     w.history=[...(w.history||[]),...(existing?[{caseId:existing.id,version:existing.version,snapshot:existing}]:[])];
@@ -107,18 +117,19 @@ export function applyCommand(original, request, now = new Date().toISOString(), 
     if(proposal.action!=='create'&&!w.skills.some(s=>s.id===proposal.skillId))return error('NOT_FOUND','Original catalogue concept not found.',404);
     w.catalogueProposals=w.catalogueProposals||[];if(w.catalogueProposals.length>=300)return error('LIMIT','Review existing catalogue proposals before creating more.');
     w.catalogueProposals.push({id:request.idempotencyKey,action:proposal.action,skillId:proposal.action==='create'?undefined:proposal.skillId,name:proposal.name,definition:proposal.definition,category:proposal.category,family:proposal.family,reason:proposal.reason,status:'draft',at:now});
-  } else if(['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start','sbo.support.ask.start'].includes(op)){
-    const capability=({'sbo.profile.draft.start':'profileDraft','sbo.trend.scan.start':'trendResearch','sbo.upskill.propose.start':'upskilling','sbo.support.ask.start':'support'})[op];
+  } else if(['sbo.profile.draft.start','sbo.trend.scan.start','sbo.upskill.propose.start','sbo.support.ask.start','sbo.profile.evolve.start'].includes(op)){
+    const capability=({'sbo.profile.draft.start':'profileDraft','sbo.trend.scan.start':'trendResearch','sbo.upskill.propose.start':'upskilling','sbo.support.ask.start':'support','sbo.profile.evolve.start':'profileEvolution'})[op];
     if(!w.runtimeCapabilities?.[capability])return error('INTEGRATION_NOT_READY','This agent is not connected yet. Manual evidence-based editing is available.',503);
     const c=w.cases.find(c=>c.id===p.caseId)||(op==='sbo.support.ask.start'?{id:'workspace-support',version:0,title:'Workspace support',unit:'Workspace',question:'Explain the platform and its current capabilities.',owner:'Support requester',targetDate:'',roleId:'',requirements:[],baselines:[],signals:[],measures:[],contributions:[]}:null);if(!c)return error('NOT_FOUND','Save the case before starting an analysis.',404);
     if(c.archivedAt)return error('CASE_ARCHIVED','Restore this case before analysing.');
-    if(op==='sbo.profile.draft.start'&&(w.archivedRoleIds||[]).includes(c.roleId))return error('ROLE_ARCHIVED','Restore the imported source role before mapping.');
+    if(['sbo.profile.draft.start','sbo.profile.evolve.start'].includes(op)&&(w.archivedRoleIds||[]).includes(c.roleId))return error('ROLE_ARCHIVED','Restore the imported source role before mapping.');
     if(op==='sbo.profile.draft.start'&&!c.roleId)return error('VALIDATION_ERROR','Select a global role for profile drafting.');
     if(op==='sbo.upskill.propose.start'&&!c.requirements.length)return error('VALIDATION_ERROR','Create role requirements before requesting development formats.');
     if(op==='sbo.support.ask.start'&&!required(p.question))return error('VALIDATION_ERROR','Enter a support question.');
     if(op==='sbo.trend.scan.start'&&c.researchParameters?.sourceIds?.length===0)return error('VALIDATION_ERROR','Select at least one curated source.');
     if(w.runs.some(r=>r.caseId===c.id&&['queued','running'].includes(r.status)&&((r.operation==='sbo.support.ask.start')===(op==='sbo.support.ask.start'))))return error('RUN_ACTIVE','An analysis is already active for this case.',409);
-    const run={id:request.idempotencyKey,caseId:c.id,operation:op,status:'queued',quality:'pending',stage:'Queued for analysis',inputVersion:c.version,startedAt:now,updatedAt:now,inputCase:JSON.parse(JSON.stringify(c)),retryOfRunId:p.retryOfRunId,...(op==='sbo.support.ask.start'?{question:p.question.slice(0,4000),section:typeof p.section==='string'?p.section.slice(0,80):'Overview'}:{})};w.runs.push(run);
+    let evolutionInput;if(op==='sbo.profile.evolve.start'){if(!validScenario(p.scenario)||!c.roleId||!w.roles.some(r=>r.id===c.roleId)||!c.requirements.length||c.requirements.length>20)return error('VALIDATION_ERROR','A mapped JRD with 1–20 requirements and a valid scenario is required.');const evidence=evolutionEvidence(w,c);if(evidence.signals.length<5)return error('EVIDENCE_REQUIRED','Complete and review an emerging-skill scan with at least five evidenced findings first.');evolutionInput={signals:evidence.signals,researchRunId:evidence.runId};}
+    const run={id:request.idempotencyKey,caseId:c.id,operation:op,...(evolutionInput?{scenario:p.scenario,inputEvolution:evolutionInput}:{} ),status:'queued',quality:'pending',stage:'Queued for analysis',inputVersion:c.version,startedAt:now,updatedAt:now,inputCase:JSON.parse(JSON.stringify(c)),retryOfRunId:p.retryOfRunId,...(op==='sbo.support.ask.start'?{question:p.question.slice(0,4000),section:typeof p.section==='string'?p.section.slice(0,80):'Overview'}:{})};w.runs.push(run);
   } else if(op==='sbo.run.interrupt'){
     const run=w.runs.find(r=>r.id===p.runId);if(!run)return error('NOT_FOUND','Run not found.',404);
     if(['queued','running'].includes(run.status)){run.status='interrupted';run.quality='interrupted';run.updatedAt=now;run.stage='Stopped before result adoption';}
@@ -126,6 +137,7 @@ export function applyCommand(original, request, now = new Date().toISOString(), 
     const run=w.runs.find(r=>r.id===p.runId),c=w.cases.find(c=>c.id===run?.caseId);if(!run||!c||run.status!=='succeeded')return error('RESULT_NOT_READY','No valid result is available.',409);
     if(c.version!==run.inputVersion)return error('VERSION_CONFLICT','This result used an earlier case version. Compare it or start a new analysis.',409);
     if(run.adopted)return error('VALIDATION_ERROR','This result is already adopted.');
+    if(run.operation==='sbo.profile.evolve.start')return error('VALIDATION_ERROR','Review scenario overrides in Role evolution and apply the separate future draft there.');
     if(run.operation==='sbo.support.ask.start')return error('VALIDATION_ERROR','Support responses do not automatically change a case. Confirm a suggested action or edit the working draft.');
     c.requirements=[...c.requirements,...(run.result?.requirements||[]).filter(r=>!c.requirements.some(x=>x.skillId===r.skillId&&x.task===r.task))];c.signals=[...c.signals,...(run.result?.signals||[])];c.measures=[...c.measures,...(run.result?.measures||[])];const problem=failCase(c);if(problem)return error('INVALID_MODEL_OUTPUT',problem);
     c.version++;c.updatedAt=now;c.status='draft';c.decisions=[];run.adopted=true;caseId=c.id;version=c.version;
