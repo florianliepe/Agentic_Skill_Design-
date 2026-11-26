@@ -3,12 +3,13 @@ export function routeFor(operation){
  const routes={
   'sbo.import.mapping.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:2800},
   'sbo.profile.draft.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:6000},
+  'sbo.profile.evolve.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:6500,reasoningEffort:'low'},
   'sbo.trend.scan.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:7000,reasoningEffort:'low'},
   'sbo.upskill.propose.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:5000},
   'sbo.support.ask.start':{primary:'gpt-6-luna',fallback:'claude-sonnet-5',maxTokens:1800}
  };
  if(!routes[operation])throw new Error('UNSUPPORTED_AGENT_OPERATION');
- return {...routes[operation],timeoutMs:operation==='sbo.trend.scan.start'?75000:45000,maxAttempts:2};
+ return {...routes[operation],timeoutMs:['sbo.trend.scan.start','sbo.profile.evolve.start'].includes(operation)?75000:45000,maxAttempts:2};
 }
 export function modelRequestBody(route,model,messages){return {model,messages,max_tokens:route.maxTokens,temperature:1,...(model==='gpt-6-luna'&&route.reasoningEffort?{reasoning_effort:route.reasoningEffort}:{})};}
 export function gatewayFailure(response){

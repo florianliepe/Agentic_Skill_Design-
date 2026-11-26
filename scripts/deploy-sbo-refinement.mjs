@@ -34,9 +34,9 @@ const auth=await instantiate('n8n/sbo-personal-access.template.json',{SBO_WORKSP
 let enabled=false;for(let attempt=0;attempt<3&&!enabled;attempt++){
  const rows=await api('/data-tables/'+config.tableId+'/rows?limit=2');if(rows.data.length!==1)throw new Error('Unexpected workspace rows');const row=rows.data[0],w=JSON.parse(row.payload);
  if(attempt===0)await fs.writeFile(backupDir+'/workspace-before.json',JSON.stringify(w));
- w.runtimeCapabilities={...w.runtimeCapabilities,profileDraft:true,trendResearch:true,upskilling:true,support:true,importMapping:true};w.revision++;
+ w.runtimeCapabilities={...w.runtimeCapabilities,profileDraft:true,trendResearch:true,upskilling:true,support:true,importMapping:true,profileEvolution:true};w.revision++;
  const receipt=await api('/data-tables/'+config.tableId+'/rows/update','PATCH',{filter:{type:'and',filters:[{columnName:'workspace',condition:'eq',value:'main'},{columnName:'revision',condition:'eq',value:row.revision}]},data:{revision:w.revision,payload:JSON.stringify(w)}});
- const latest=await api('/data-tables/'+config.tableId+'/rows?limit=1');enabled=JSON.parse(latest.data[0].payload).runtimeCapabilities.support===true&&JSON.parse(latest.data[0].payload).runtimeCapabilities.importMapping===true;void receipt;
+ const latest=await api('/data-tables/'+config.tableId+'/rows?limit=1');enabled=JSON.parse(latest.data[0].payload).runtimeCapabilities.support===true&&JSON.parse(latest.data[0].payload).runtimeCapabilities.importMapping===true&&JSON.parse(latest.data[0].payload).runtimeCapabilities.profileEvolution===true;void receipt;
 }
 if(!enabled)throw new Error('Capabilities update conflicted; reconcile before enabling the frontend');
-console.log(JSON.stringify({workspace:config.workflowId,worker:config.workerId,personalAccess:config.personalAccessId,mailDelivery:config.mailWorkflowId,capabilities:['profile','trends','upskilling','support'],publication:'not performed'}));
+console.log(JSON.stringify({workspace:config.workflowId,worker:config.workerId,personalAccess:config.personalAccessId,mailDelivery:config.mailWorkflowId,capabilities:['profile','trends','upskilling','support','importMapping','profileEvolution'],publication:'not performed'}));

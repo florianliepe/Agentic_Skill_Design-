@@ -1,0 +1,7 @@
+import fs from 'node:fs/promises';
+import {api} from './n8n-client.mjs';
+const config=JSON.parse(await fs.readFile('.local/deployment.json','utf8'));
+const owned=['workerId','personalAccessId','personalWorkspaceId','mailWorkflowId'],report=[];
+for(const key of owned){const w=await api('/workflows/'+config[key]);if(!w.name.startsWith('Skill Design Studio |'))throw Error('Unexpected workflow ownership');const calls=w.nodes.filter(n=>/executeWorkflow$|toolWorkflow$|agentTool$/.test(n.type));report.push({name:w.name,active:w.active,workflowTools:w.nodes.filter(n=>/toolWorkflow$/.test(n.type)).length,agentRoots:w.nodes.filter(n=>/\.agent$|\.agentTool$/.test(n.type)).length,calls:calls.map(n=>({name:n.name,type:n.type,waitForOutput:n.parameters.options?.waitForSubWorkflow??null})),privateInputs:w.nodes.filter(n=>/executeWorkflowTrigger$/.test(n.type)).map(n=>({name:n.name,inputSource:n.parameters.inputSource}))});}
+const summary={checkedAt:new Date().toISOString(),scope:'Skill Design Studio only',workflows:report,conclusion:'Explicit asynchronous workflow dispatch and validated specialist prompts. No Call n8n Workflow Tool or dynamic AI Agent root is currently used. Role evolution uses the same request/run/result contract and bounded model route. Tool-driven delegation is a separate architectural choice, not a prerequisite for this fixed sequence.'};
+await fs.mkdir('.local',{recursive:true});await fs.writeFile('.local/workflow-interaction-audit.json',JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));
